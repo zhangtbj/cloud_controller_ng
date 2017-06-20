@@ -1,5 +1,6 @@
 require 'services/api'
 require 'controllers/services/lifecycle/service_instance_binding_manager'
+require 'fetchers/v2/service_bindings_fetcher'
 
 module VCAP::CloudController
   class ServiceBindingsController < RestController::ModelController
@@ -17,15 +18,23 @@ module VCAP::CloudController
     get path_guid, :read
 
     def read(guid)
+      acl_client = VCAP::CloudController::AclServiceClient.new
+      authz = VCAP::CloudController::Authz.new(acl_client)
+
       obj = find_guid(guid)
       raise CloudController::Errors::ApiError.new_from_details('ServiceBindingNotFound', guid) unless obj.v2_app.present?
-      validate_access(:read, obj)
+      unless authz.can_do?("urn:app:/#{obj.app.space.organization.guid}/#{obj.app.space.guid}/#{obj.app.guid}", 'read', SecurityContext.current_user_id)
+        raise CloudController::Errors::ApiError.new_from_details('NotAuthorized')
+      end
       object_renderer.render_json(self.class, obj, @opts)
     end
 
     post path, :create
 
     def create
+      acl_client = VCAP::CloudController::AclServiceClient.new
+      authz = VCAP::CloudController::Authz.new(acl_client)
+
       @request_attrs = self.class::CreateMessage.decode(body).extract(stringify_keys: true)
       logger.debug 'cc.create', model: self.class.model_class_name, attributes: request_attrs
       raise InvalidRequest unless request_attrs
@@ -48,7 +57,10 @@ module VCAP::CloudController
       app, service_instance = ServiceBindingCreateFetcher.new.fetch(message.app_guid, message.service_instance_guid)
       raise CloudController::Errors::ApiError.new_from_details('AppNotFound', @request_attrs['app_guid']) unless app
       raise CloudController::Errors::ApiError.new_from_details('ServiceInstanceNotFound', @request_attrs['service_instance_guid']) unless service_instance
-      raise CloudController::Errors::ApiError.new_from_details('NotAuthorized') unless Permissions.new(SecurityContext.current_user).can_write_to_space?(app.space_guid)
+      unless authz.can_do?("urn:app:/#{app.space.organization.guid}/#{app.space.guid}/#{app.guid}", 'service-bind', SecurityContext.current_user_id) &&
+        authz.can_do?("urn:service-instance:/#{service_instance.space.organization.guid}/#{service_instance.space.guid}/#{service_instance.guid}", 'read', SecurityContext.current_user_id)
+        raise CloudController::Errors::ApiError.new_from_details('NotAuthorized')
+      end
 
       creator = ServiceBindingCreate.new(UserAuditInfo.from_context(SecurityContext))
       service_binding = creator.create(app, service_instance, message, volume_services_enabled?)
@@ -68,9 +80,14 @@ module VCAP::CloudController
     delete path_guid, :delete
 
     def delete(guid)
+      acl_client = VCAP::CloudController::AclServiceClient.new
+      authz = VCAP::CloudController::Authz.new(acl_client)
+
       binding = ServiceBinding.find(guid: guid)
       raise CloudController::Errors::ApiError.new_from_details('ServiceBindingNotFound', guid) unless binding
-      raise CloudController::Errors::ApiError.new_from_details('NotAuthorized') unless Permissions.new(SecurityContext.current_user).can_write_to_space?(binding.space.guid)
+      unless authz.can_do?("urn:app:/#{binding.app.space.organization.guid}/#{binding.app.space.guid}/#{binding.app.guid}", 'service-bind', SecurityContext.current_user_id)
+        raise CloudController::Errors::ApiError.new_from_details('NotAuthorized')
+      end
 
       deleter = ServiceBindingDelete.new(UserAuditInfo.from_context(SecurityContext))
 
@@ -90,6 +107,13 @@ module VCAP::CloudController
     define_messages
 
     private
+
+    def enumerate_dataset
+      qp = self.class.query_parameters
+      visible_objects = ServiceBindingsFetcher.new.fetch(@access_context.user_id, @access_context.admin_override)
+      filtered_objects = filter_dataset(visible_objects)
+      get_filtered_dataset_for_enumeration(model, filtered_objects, qp, @opts)
+    end
 
     def filter_dataset(dataset)
       dataset.select_all(ServiceBinding.table_name).join(App, app_guid: :app_guid, type: 'web')

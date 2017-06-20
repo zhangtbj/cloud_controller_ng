@@ -10,11 +10,25 @@ module VCAP::CloudController
 
     def read_env?(service_binding)
       return true if admin_user? || admin_read_only_user?
-      service_binding.space.has_developer?(context.user)
+      authz.can_do?(
+        "urn:app:/#{service_binding.app.space.organization.guid}/#{service_binding.app.space.guid}/#{service_binding.app.guid}",
+        'see-secrets',
+        SecurityContext.current_user_id
+      )
     end
 
     def read_env_with_token?(service_binding)
       read_with_token?(service_binding)
+    end
+
+    private
+
+    def acl_client
+      @acl_client ||= VCAP::CloudController::AclServiceClient.new
+    end
+
+    def authz
+      @authz ||= VCAP::CloudController::Authz.new(acl_client)
     end
   end
 end
