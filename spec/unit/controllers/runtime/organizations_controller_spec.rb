@@ -818,9 +818,33 @@ module VCAP::CloudController
           expect(decoded_guids).to match_array(@inactive.map(&:guid))
         end
       end
+
+      describe 'get /v2/organizations/:guid/services?q=service_broker_guid:<broker.guid>' do
+        context 'with an offering that has public plans' do
+          let(:broker) { ServiceBroker.make }
+          let(:service) { Service.make(service_broker: broker, active: true) }
+          let(:service_plan) { ServicePlan.make(service: service, public: false) }
+
+          before do
+            service.service_plans << service_plan
+            ServicePlanVisibility.make(service_plan: service.service_plans.first, organization: org)
+          end
+
+          it "returns the org's service" do
+            get "/v2/organizations/#{org.guid}/services?q=service_broker_guid:#{broker.guid}"
+            expect(last_response.status).to eq(200), last_response.body
+            expect(decoded_guids).to include(service.guid)
+          end
+        end
+      end
     end
 
     describe 'GET /v2/organizations/:guid/memory_usage' do
+      before do
+        space = Space.make(organization: org)
+        ProcessModelFactory.make(space: space, memory: 200, instances: 2, state: 'STARTED', type: 'worker')
+      end
+
       context 'for an organization that does not exist' do
         it 'returns a 404' do
           set_current_user_as_admin
@@ -841,13 +865,11 @@ module VCAP::CloudController
 
       it 'calls the organization memory usage calculator' do
         set_current_user_as_admin
-        allow(OrganizationMemoryCalculator).to receive(:get_memory_usage).and_return(2)
 
         get "/v2/organizations/#{org.guid}/memory_usage"
 
         expect(last_response.status).to eq(200)
-        expect(OrganizationMemoryCalculator).to have_received(:get_memory_usage).with(org)
-        expect(MultiJson.load(last_response.body)).to eq({ 'memory_usage_in_mb' => 2 })
+        expect(MultiJson.load(last_response.body)).to eq({ 'memory_usage_in_mb' => 400 })
       end
     end
 
@@ -1464,7 +1486,7 @@ module VCAP::CloudController
 
         it 'fails' do
           delete "/v2/organizations/#{organization.guid}/private_domains/#{private_domain.guid}"
-          expect(last_response.status).to eq(400)
+          expect(last_response.status).to eq(400), last_response.body
         end
       end
 

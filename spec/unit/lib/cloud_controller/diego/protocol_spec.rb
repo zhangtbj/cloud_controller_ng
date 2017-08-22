@@ -49,13 +49,19 @@ module VCAP::CloudController
         let(:droplet) { DropletModel.make(package: package, app: app) }
         let(:staging_details) do
           Diego::StagingDetails.new.tap do |details|
-            details.droplet               = droplet
+            details.staging_guid          = droplet.guid
             details.package               = package
             details.environment_variables = { 'nightshade_fruit' => 'potato' }
             details.staging_memory_in_mb  = 42
             details.staging_disk_in_mb    = 51
-            details.start_after_staging = true
+            details.start_after_staging   = true
+            details.lifecycle             = lifecycle
           end
+        end
+        let(:lifecycle_type) { 'buildpack' }
+        let(:staging_message) { BuildCreateMessage.new(lifecycle: { data: {}, type: lifecycle_type }) }
+        let(:lifecycle) do
+          LifecycleProvider.provide(package, staging_message)
         end
         let(:config) do
           {
@@ -85,7 +91,7 @@ module VCAP::CloudController
 
         it 'contains the correct payload for staging a package' do
           expect(result).to eq({
-            app_id:              staging_details.droplet.guid,
+            app_id:              staging_details.staging_guid,
             log_guid:            app.guid,
             memory_mb:           staging_details.staging_memory_in_mb,
             disk_mb:             staging_details.staging_disk_in_mb,
@@ -93,16 +99,16 @@ module VCAP::CloudController
             environment:         VCAP::CloudController::Diego::NormalEnvHashToDiegoEnvArrayPhilosopher.muse(staging_details.environment_variables),
             egress_rules:        ['staging_egress_rule'],
             timeout:             90,
-            lifecycle:           droplet.lifecycle_type,
+            lifecycle:           lifecycle_type,
             lifecycle_data:      { 'some' => 'data' },
             completion_callback: "http://#{user}:#{password}@#{internal_service_hostname}:#{external_port}" \
-            "/internal/v3/staging/#{droplet.guid}/droplet_completed?start=#{staging_details.start_after_staging}"
+            "/internal/v3/staging/#{droplet.guid}/build_completed?start=#{staging_details.start_after_staging}"
           })
         end
       end
 
       describe '#desire_app_request' do
-        let(:process) { AppFactory.make }
+        let(:process) { ProcessModelFactory.make }
         let(:default_health_check_timeout) { 99 }
         let(:request) { protocol.desire_app_request(process, default_health_check_timeout) }
 
@@ -118,7 +124,7 @@ module VCAP::CloudController
 
       describe '#desire_app_message' do
         let(:space) { Space.make }
-        let(:process) { AppFactory.make(space: space, diego: true, ports: ports, type: type, health_check_timeout: 12) }
+        let(:process) { ProcessModelFactory.make(space: space, diego: true, ports: ports, type: type, health_check_timeout: 12) }
         let(:default_health_check_timeout) { 99 }
         let(:message) { protocol.desire_app_message(process, default_health_check_timeout) }
         let(:ports) { [2222, 3333] }
@@ -198,7 +204,7 @@ module VCAP::CloudController
           let(:ports) { nil }
 
           context 'when this is a docker app' do
-            let(:process) { AppFactory.make(docker_image: 'docker/image', diego: true, ports: ports, type: type) }
+            let(:process) { ProcessModelFactory.make(docker_image: 'docker/image', diego: true, ports: ports, type: type) }
 
             before do
               allow(process).to receive(:docker_ports).and_return([123, 456])
@@ -233,7 +239,7 @@ module VCAP::CloudController
             TestConfig.override(default_health_check_timeout: default_health_check_timeout)
           end
 
-          let(:process) { AppFactory.make(health_check_timeout: nil, diego: true) }
+          let(:process) { ProcessModelFactory.make(health_check_timeout: nil, diego: true) }
 
           it 'uses the default app health check from the config' do
             expect(message['health_check_timeout_in_seconds']).to eq(default_health_check_timeout)

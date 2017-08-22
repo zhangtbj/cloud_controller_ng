@@ -1,4 +1,5 @@
 # encoding: utf-8
+
 require 'spec_helper'
 
 module VCAP::CloudController
@@ -7,16 +8,16 @@ module VCAP::CloudController
     let(:space) { Space.make }
 
     describe '#staging_in_progress' do
-      context 'when a droplet is in staging state' do
-        let!(:droplet) { DropletModel.make(app_guid: app_model.guid, state: DropletModel::STAGING_STATE) }
+      context 'when a build is in staging state' do
+        let!(:build) { BuildModel.make(app_guid: app_model.guid, state: BuildModel::STAGING_STATE) }
 
         it 'returns true' do
           expect(app_model.staging_in_progress?).to eq(true)
         end
       end
 
-      context 'when a droplet is not in neither pending or staging state' do
-        let!(:droplet) { DropletModel.make(app_guid: app_model.guid, state: DropletModel::STAGED_STATE) }
+      context 'when a build is not in neither pending or staging state' do
+        let!(:build) { BuildModel.make(app_guid: app_model.guid, state: BuildModel::STAGED_STATE) }
 
         it 'returns false' do
           expect(app_model.staging_in_progress?).to eq(false)
@@ -28,6 +29,22 @@ module VCAP::CloudController
       describe 'max_task_sequence_id' do
         it 'defaults to 0' do
           expect(app_model.max_task_sequence_id).to eq(1)
+        end
+      end
+    end
+
+    describe '#destroy' do
+      context 'when the app has buildpack_lifecycle_data' do
+        subject(:lifecycle_data) do
+          BuildpackLifecycleDataModel.create(buildpacks: ['http://some-buildpack.com', 'http://another-buildpack.net'])
+        end
+
+        it 'destroys the buildpack_lifecycle_data and associated buildpack_lifecycle_buildpacks' do
+          app_model.update(buildpack_lifecycle_data: lifecycle_data)
+          expect {
+            app_model.destroy
+          }.to change { BuildpackLifecycleDataModel.count }.by(-1).
+            and change { BuildpackLifecycleBuildpackModel.count }.by(-2)
         end
       end
     end
@@ -168,7 +185,7 @@ module VCAP::CloudController
       end
 
       it 'is a persistable hash' do
-        expect(app_model.reload.lifecycle_data.buildpack).to eq(lifecycle_data.buildpack)
+        expect(app_model.reload.lifecycle_data.buildpacks).to eq(lifecycle_data.buildpacks)
         expect(app_model.reload.lifecycle_data.stack).to eq(lifecycle_data.stack)
       end
 
@@ -183,7 +200,7 @@ module VCAP::CloudController
 
     describe '#database_uri' do
       let(:parent_app) { AppModel.make(environment_variables: { 'jesse' => 'awesome' }, space: space) }
-      let(:app) { App.make(app: parent_app) }
+      let(:process) { ProcessModel.make(app: parent_app) }
 
       context 'when there are database-like services' do
         before do
@@ -197,7 +214,7 @@ module VCAP::CloudController
         end
 
         it 'returns database uri' do
-          expect(app.reload.database_uri).to eq('mysql2://foo.com')
+          expect(process.reload.database_uri).to eq('mysql2://foo.com')
         end
       end
 
@@ -213,13 +230,13 @@ module VCAP::CloudController
         end
 
         it 'returns nil' do
-          expect(app.reload.database_uri).to be_nil
+          expect(process.reload.database_uri).to be_nil
         end
       end
 
       context 'when there are no services' do
         it 'returns nil' do
-          expect(app.reload.database_uri).to be_nil
+          expect(process.reload.database_uri).to be_nil
         end
       end
 
@@ -231,7 +248,65 @@ module VCAP::CloudController
         end
 
         it 'returns nil' do
-          expect(app.reload.database_uri).to be_nil
+          expect(process.reload.database_uri).to be_nil
+        end
+      end
+    end
+
+    describe 'before_save' do
+      describe 'default enable_ssh' do
+        context 'when enable_ssh is set explicitly' do
+          it 'does not overwrite it with the default' do
+            app1 = AppModel.make(enable_ssh: true)
+            expect(app1.enable_ssh).to eq(true)
+
+            app2 = AppModel.make(enable_ssh: false)
+            expect(app2.enable_ssh).to eq(false)
+          end
+        end
+
+        context 'when default_app_ssh_access is true' do
+          before do
+            TestConfig.override({ default_app_ssh_access: true })
+          end
+
+          it 'sets enable_ssh to true' do
+            app = AppModel.make
+            expect(app.enable_ssh).to eq(true)
+          end
+        end
+
+        context 'when default_app_ssh_access is false' do
+          before do
+            TestConfig.override({ default_app_ssh_access: false })
+          end
+
+          it 'sets enable_ssh to false' do
+            app = AppModel.make
+            expect(app.enable_ssh).to eq(false)
+          end
+        end
+      end
+
+      describe 'updating process version' do
+        let(:parent_app) { AppModel.make(enable_ssh: false) }
+        let!(:process1) { ProcessModelFactory.make(app: parent_app) }
+        let!(:process2) { ProcessModelFactory.make(app: parent_app, type: 'astroboy') }
+
+        context 'when enable_ssh has changed' do
+          it 'sets a new version for all processes' do
+            expect {
+              parent_app.update(enable_ssh: true)
+            }.to change { [process1.reload.version, process2.reload.version] }
+          end
+        end
+
+        context 'when enable_ssh has NOT changed' do
+          it 'does not update the process versions' do
+            expect {
+              parent_app.update(enable_ssh: false)
+            }.not_to change { [process1.reload.version, process2.reload.version] }
+          end
         end
       end
     end

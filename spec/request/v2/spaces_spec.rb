@@ -172,33 +172,29 @@ RSpec.describe 'Spaces' do
 
   describe 'DELETE /v2/spaces/:guid/unmapped_routes' do
     let(:space) { VCAP::CloudController::Space.make(organization: org) }
-    let(:process) { VCAP::CloudController::AppFactory.make(state: 'STARTED') }
+    let(:process) { VCAP::CloudController::ProcessModelFactory.make(state: 'STARTED') }
 
     before do
       space.organization.add_user(user)
       space.add_developer(user)
     end
 
-    it 'deletes orphaned routes' do
+    it 'deletes orphaned routes, does not delete mapped or bound routes' do
       unmapped_route = VCAP::CloudController::Route.make(space: space)
+
+      mapped_route = VCAP::CloudController::Route.make(space: space)
+      VCAP::CloudController::RouteMappingModel.make(app: process.app, route: mapped_route, app_port: 9090)
+
+      bound_route = VCAP::CloudController::Route.make(space: space)
+      service_instance = VCAP::CloudController::ManagedServiceInstance.make(:routing, space: space)
+      VCAP::CloudController::RouteBinding.make(service_instance: service_instance, route: bound_route)
 
       delete "/v2/spaces/#{space.guid}/unmapped_routes", {}, headers_for(user)
 
       expect(last_response.status).to eq(204)
       expect(unmapped_route.exists?).to eq(false), "Expected route '#{unmapped_route.guid}' to not exist"
-
-      expect(last_response.body).to be_empty
-    end
-
-    it 'does not delete mapped routes' do
-      mapped_route = VCAP::CloudController::Route.make(space: space)
-      VCAP::CloudController::RouteMappingModel.make(app: process.app, route: mapped_route, app_port: 9090)
-
-      delete "/v2/spaces/#{space.guid}/unmapped_routes", {}, headers_for(user)
-
-      expect(last_response.status).to eq(204), "Expected 204, got: #{last_response.status} with body: #{last_response.body}"
       expect(mapped_route.exists?).to eq(true), "Expected route '#{mapped_route.guid}' to exist"
-
+      expect(bound_route.exists?).to eq(true), "Expected route '#{bound_route.guid}' to exist"
       expect(last_response.body).to be_empty
     end
   end

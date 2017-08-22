@@ -48,8 +48,7 @@ class AppsV3Controller < ApplicationController
     unprocessable!(message.errors.full_messages) unless message.valid?
 
     space = Space.where(guid: message.space_guid).first
-    unprocessable_space! unless space && can_read?(space.guid, space.organization_guid)
-    unauthorized! unless can_write?(message.space_guid)
+    unprocessable_space! unless space && can_read?(space.guid, space.organization_guid) && can_write?(space.guid)
 
     if message.lifecycle_type == VCAP::CloudController::PackageModel::DOCKER_TYPE
       FeatureFlag.raise_unless_enabled!(:diego_docker)
@@ -92,11 +91,13 @@ class AppsV3Controller < ApplicationController
     app_not_found! unless app && can_read?(space.guid, org.guid)
     unauthorized! unless can_write?(space.guid)
 
-    AppDelete.new(user_audit_info).delete(app)
+    delete_action = AppDelete.new(user_audit_info)
+    deletion_job  = VCAP::CloudController::Jobs::DeleteActionJob.new(AppModel, app.guid, delete_action)
 
-    head :no_content
-  rescue AppDelete::InvalidDelete => e
-    unprocessable!(e.message)
+    job = Jobs::Enqueuer.new(deletion_job, queue: 'cc-generic').enqueue_pollable
+
+    url_builder = VCAP::CloudController::Presenters::ApiUrlBuilder.new
+    head HTTP::ACCEPTED, 'Location' => url_builder.build_url(path: "/v3/jobs/#{job.guid}")
   end
 
   def start
@@ -168,8 +169,8 @@ class AppsV3Controller < ApplicationController
   end
 
   def assign_current_droplet
-    app_guid                 = params[:guid]
-    droplet_guid             = HashUtils.dig(params[:body], 'data', 'guid')
+    app_guid     = params[:guid]
+    droplet_guid = HashUtils.dig(params[:body], 'data', 'guid')
     cannot_remove_droplet! if params[:body].key?('data') && droplet_guid.nil?
     app, space, org, droplet = AssignCurrentDropletFetcher.new.fetch(app_guid, droplet_guid)
 
@@ -179,11 +180,11 @@ class AppsV3Controller < ApplicationController
     SetCurrentDroplet.new(user_audit_info).update_to(app, droplet)
 
     render status: :ok, json: Presenters::V3::AppDropletRelationshipPresenter.new(
-      resource_path: "apps/#{app_guid}",
-      related_instance: droplet,
-      relationship_name: 'current_droplet',
+      resource_path:         "apps/#{app_guid}",
+      related_instance:      droplet,
+      relationship_name:     'current_droplet',
       related_resource_name: 'droplets',
-      app_model: app
+      app_model:             app
     )
   rescue SetCurrentDroplet::InvalidApp, SetCurrentDroplet::Error => e
     unprocessable!(e.message)
@@ -196,12 +197,12 @@ class AppsV3Controller < ApplicationController
 
     droplet_not_found! unless droplet
     render status: :ok, json: Presenters::V3::AppDropletRelationshipPresenter.new(
-      resource_path: "apps/#{app.guid}",
-      related_instance: droplet,
-      relationship_name: 'current_droplet',
+      resource_path:         "apps/#{app.guid}",
+      related_instance:      droplet,
+      relationship_name:     'current_droplet',
       related_resource_name: 'droplets',
-      app_model: app
-            )
+      app_model:             app
+    )
   end
 
   def current_droplet
@@ -213,14 +214,43 @@ class AppsV3Controller < ApplicationController
     render status: :ok, json: Presenters::V3::DropletPresenter.new(droplet)
   end
 
+  def features
+    app, space, org = AppFetcher.new.fetch(params[:guid])
+    app_not_found! unless app && can_read?(space.guid, org.guid)
+    render status: :ok, json: {
+      pagination: {},
+      resources:   [feature_ssh(app),]
+    }
+  end
+
+  def feature
+    app, space, org = AppFetcher.new.fetch(params[:guid])
+    app_not_found! unless app && can_read?(space.guid, org.guid)
+    name = params[:name]
+    case name
+    when 'ssh'
+      render status: :ok, json: feature_ssh(app)
+    else
+      resource_not_found!(name)
+    end
+  end
+
   private
 
   def droplet_not_found!
     resource_not_found!(:droplet)
   end
 
+  def feature_ssh(app)
+    {
+      name:        'ssh',
+      description: 'Enable SSHing into the app.',
+      enabled:     app.enable_ssh,
+    }
+  end
+
   def unprocessable_space!
-    unprocessable!('Space is invalid. Ensure it exists and you have access to it.')
+    unprocessable!('Invalid space. Ensure that the space exists and you have access to it.')
   end
 
   def app_not_found!

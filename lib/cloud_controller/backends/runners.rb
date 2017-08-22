@@ -1,4 +1,3 @@
-require 'cloud_controller/dea/runner'
 require 'cloud_controller/diego/runner'
 require 'cloud_controller/diego/process_guid'
 require 'cloud_controller/diego/protocol'
@@ -8,22 +7,16 @@ require 'cloud_controller/diego/egress_rules'
 
 module VCAP::CloudController
   class Runners
-    def initialize(config, message_bus, dea_pool)
+    def initialize(config)
       @config = config
-      @message_bus = message_bus
-      @dea_pool = dea_pool
     end
 
     def runner_for_app(app)
-      app.diego? ? diego_runner(app) : dea_runner(app)
-    end
-
-    def run_with_diego?(app)
-      app.diego?
+      diego_runner(app)
     end
 
     def diego_apps(batch_size, last_id)
-      App.select_all(App.table_name).
+      ProcessModel.select_all(ProcessModel.table_name).
         diego.
         runnable.
         where { Sequel[App.table_name.to_sym][:id] > last_id }.
@@ -35,18 +28,18 @@ module VCAP::CloudController
 
     def diego_apps_from_process_guids(process_guids)
       process_guids = Array(process_guids).to_set
-      App.select_all(App.table_name).
+      ProcessModel.select_all(ProcessModel.table_name).
         diego.
         runnable.
-        where("#{App.table_name}__guid".to_sym => process_guids.map { |pg| Diego::ProcessGuid.app_guid(pg) }).
-        order("#{App.table_name}__id".to_sym).
+        where("#{ProcessModel.table_name}__guid".to_sym => process_guids.map { |pg| Diego::ProcessGuid.app_guid(pg) }).
+        order("#{ProcessModel.table_name}__id".to_sym).
         eager(:current_droplet, :space, :service_bindings, { routes: :domain }, { app: :buildpack_lifecycle_data }).
         all.
         select { |app| process_guids.include?(Diego::ProcessGuid.from_process(app)) }
     end
 
     def diego_apps_cache_data(batch_size, last_id)
-      diego_apps = App.
+      diego_apps = ProcessModel.
                    diego.
                    runnable.
                    where { Sequel[App.table_name.to_sym][:id] > last_id }.
@@ -56,95 +49,11 @@ module VCAP::CloudController
       diego_apps = diego_apps.buildpack_type unless FeatureFlag.enabled?(:diego_docker)
 
       diego_apps.select_map([
-        "#{App.table_name}__id".to_sym,
-        "#{App.table_name}__guid".to_sym,
-        "#{App.table_name}__version".to_sym,
-        "#{App.table_name}__updated_at".to_sym
+        "#{ProcessModel.table_name}__id".to_sym,
+        "#{ProcessModel.table_name}__guid".to_sym,
+        "#{ProcessModel.table_name}__version".to_sym,
+        "#{ProcessModel.table_name}__updated_at".to_sym
       ])
-    end
-
-    def dea_apps(batch_size, last_id)
-      query = App.select_all(App.table_name).
-              dea.
-              where { Sequel[App.table_name.to_sym][:id] > last_id }.
-              order("#{App.table_name}__id".to_sym).
-              limit(batch_size)
-
-      query.all
-    end
-
-    def dea_apps_hm9k
-      # query 1
-      # get all process information where the process is STARTED and running on the DEA
-      process_query = if App.db.database_type == :mssql
-                        App.db["SELECT P.ID, P.APP_GUID, P.INSTANCES, P.VERSION, APPS.DROPLET_GUID FROM PROCESSES P
-                                INNER JOIN APPS ON (APPS.GUID = P.APP_GUID AND P.STATE ='STARTED' AND P.DIEGO = 0)"]
-                      else
-                        App.db["Select p.id, p.app_guid, p.instances, p.version, apps.droplet_guid from processes p
-                                inner join apps ON (apps.guid = p.app_guid AND p.state ='STARTED' AND p.diego IS FALSE)"]
-                      end
-      processes = process_query.all
-
-      # query 2
-      # get all necessary droplet information. This includes:
-      #    where the droplet's associated process is running on the DEA and the process is STARTED
-      #    Finding only the latest droplet associated with the process
-      droplets_query = if App.db.database_type == :mssql
-                         App.db["SELECT D.ID, D.GUID, D.APP_GUID, D.CREATED_AT, D.PACKAGE_GUID, D.STATE FROM DROPLETS D
-                                JOIN PROCESSES P ON (D.APP_GUID = P.APP_GUID AND P.STATE ='STARTED' AND P.DIEGO = 0)
-                                INNER JOIN (SELECT APP_GUID, MAX(CREATED_AT) AS _MAX FROM DROPLETS GROUP BY APP_GUID) AS X
-                                ON D.APP_GUID = X.APP_GUID AND D.CREATED_AT=X._MAX"]
-                       else
-                         App.db["select d.id, d.guid, d.app_guid, d.created_at, d.package_guid, d.state from droplets d
-                                join processes p ON (d.app_guid = p.app_guid AND p.state ='STARTED' AND p.diego IS FALSE)
-                                inner join (select app_guid, max(created_at) as _max from droplets group by app_guid) as x
-                                ON d.app_guid = x.app_guid and d.created_at=x._max"]
-                       end
-      latest_droplets = latest(droplets_query.all)
-
-      # query 3
-      # get all necessary package information. This includes:
-      #   where the package's associated process is running on the DEA and the process is STARTED
-      #   finding only the latest package associated with the process
-
-      packages_query = if App.db.database_type == :mssql
-                         App.db["SELECT PKG.ID, PKG.GUID, PKG.APP_GUID, PKG.CREATED_AT, PKG.STATE FROM PACKAGES PKG
-                                JOIN PROCESSES PRC ON
-                                  (PKG.APP_GUID = PRC.APP_GUID AND PRC.STATE ='STARTED' AND PRC.DIEGO = 0)
-                                INNER JOIN (SELECT APP_GUID, MAX(CREATED_AT) AS _MAX FROM PACKAGES GROUP BY APP_GUID) AS X
-                                ON PKG.APP_GUID = X.APP_GUID AND PKG.CREATED_AT = X._MAX"]
-                       else
-                         App.db["select pkg.id, pkg.guid, pkg.app_guid, pkg.created_at, pkg.state from packages pkg
-                                join processes proc ON
-                                  (pkg.app_guid = proc.app_guid AND proc.state ='STARTED' AND proc.diego IS FALSE)
-                                inner join (select app_guid, max(created_at) as _max from packages group by app_guid) as x
-                                ON pkg.app_guid = x.app_guid and pkg.created_at = x._max"]
-                       end
-      latest_packages = latest(packages_query.all)
-
-      process_list = []
-      largest_id = 0
-
-      processes.each do |process|
-        app_guid = process[:app_guid]
-
-        pkg_state = package_state(app_guid, process[:droplet_guid], latest_droplets[app_guid], latest_packages[app_guid])
-        next if pkg_state == 'FAILED'
-
-        if process[:id] > largest_id
-          largest_id = process[:id]
-        end
-
-        process_list.push({
-          'id'            => app_guid,
-          'instances'     => process[:instances],
-          'state'         => 'STARTED',
-          'version'       => process[:version],
-          'package_state' => pkg_state,
-        })
-      end
-
-      [process_list, largest_id]
     end
 
     def latest(items)
@@ -187,10 +96,6 @@ module VCAP::CloudController
 
     def diego_runner(app)
       Diego::Runner.new(app, @config)
-    end
-
-    def dea_runner(app)
-      Dea::Runner.new(app, @config, dependency_locator.blobstore_url_generator, @message_bus, @dea_pool)
     end
 
     def dependency_locator

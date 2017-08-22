@@ -8,9 +8,6 @@ pid_filename: /tmp/cloud_controller.pid
 newrelic_enabled: false
 development_mode: false
 
-message_bus_servers:
-  - nats://nats:nats@10.244.0.6:4222
-
 external_protocol: https
 external_domain: api.bosh-lite.com
 
@@ -21,9 +18,6 @@ app_domains: [ bosh-lite.com ]
 jobs:
   global:
     timeout_in_seconds: 14400
-
-app_events:
-  cutoff_age_in_days: 31
 
 app_usage_events:
   cutoff_age_in_days: 31
@@ -83,11 +77,10 @@ logging:
 
 loggregator:
   router: 127.0.0.1:3457
-  url: wss://loggregator.bosh-lite.com:443
   internal_url: 'http://loggregator-trafficcontroller.service.cf.internal:8081'
 
 doppler:
-  enabled: false
+  url: wss://doppler.bosh-lite.com:443
 
 db: &db
   database: postgres://ccadmin:admin@10.244.0.30:5524/ccdb
@@ -228,7 +221,6 @@ cloud_controller_username_lookup_client_secret: cloud-controller-username-lookup
 users_can_select_backend: true
 allow_app_ssh_access: true
 default_app_ssh_access: true
-default_to_diego_backend: false
 
 skip_cert_verify: true
 
@@ -258,7 +250,6 @@ default_staging_security_groups: ["public_networks","dns"]
 
 allowed_cors_domains: []
 
-dea_advertisement_timeout_in_seconds: 15
 placement_top_stager_percentage: 10
 
 system_hostnames: ["api", "uaa", "login", "doppler", "loggregator", "hm9000"]

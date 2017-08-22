@@ -42,8 +42,8 @@ class RouteMappingsController < ApplicationController
     route_not_found! unless route
 
     begin
-      route_mapping = RouteMappingCreate.new(UserAuditInfo.from_context(SecurityContext), route, process, message).add
-    rescue RouteMappingCreate::InvalidRouteMapping => e
+      route_mapping = RouteMappingCreate.new(UserAuditInfo.from_context(SecurityContext), route, process).add(message)
+    rescue ::VCAP::CloudController::RouteMappingCreate::InvalidRouteMapping => e
       unprocessable!(e.message)
     end
 

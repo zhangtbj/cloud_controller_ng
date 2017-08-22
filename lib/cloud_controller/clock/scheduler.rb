@@ -5,14 +5,21 @@ require 'cloud_controller/clock/job_timeout_calculator'
 module VCAP::CloudController
   class Scheduler
     CLEANUPS = [
-      { name: 'app_usage_events', job_name: 'app_usage_events_cleanup', class: Jobs::Runtime::AppUsageEventsCleanup, time: '18:00' },
-      { name: 'app_events', job_name: 'app_events_cleanup', class: Jobs::Runtime::AppEventsCleanup, time: '19:00' },
-      { name: 'audit_events', job_name: 'events_cleanup', class: Jobs::Runtime::EventsCleanup, time: '20:00' },
-      { name: 'failed_jobs', job_name: 'failed_jobs', class: Jobs::Runtime::FailedJobsCleanup, time: '21:00' },
-      { name: 'service_usage_events', job_name: 'service_usage_events_cleanup', class: Jobs::Services::ServiceUsageEventsCleanup, time: '22:00' },
-      { name: 'completed_tasks', job_name: 'prune_completed_tasks', class: Jobs::Runtime::PruneCompletedTasks, time: '23:00' },
-      { name: 'expired_blob_cleanup', job_name: 'expired_blob_cleanup', class: Jobs::Runtime::ExpiredBlobCleanup, time: '00:00' },
-      { name: 'expired_resource_cleanup', job_name: 'expired_resource_cleanup', class: Jobs::Runtime::ExpiredResourceCleanup, time: '00:30' },
+      { name: 'app_usage_events', class: Jobs::Runtime::AppUsageEventsCleanup, time: '18:00' },
+      { name: 'audit_events', class: Jobs::Runtime::EventsCleanup, time: '20:00' },
+      { name: 'failed_jobs', class: Jobs::Runtime::FailedJobsCleanup, time: '21:00' },
+      { name: 'service_usage_events', class: Jobs::Services::ServiceUsageEventsCleanup, time: '22:00' },
+      { name: 'completed_tasks', class: Jobs::Runtime::PruneCompletedTasks, time: '23:00' },
+      { name: 'expired_blob_cleanup', class: Jobs::Runtime::ExpiredBlobCleanup, time: '00:00' },
+      { name: 'expired_resource_cleanup', class: Jobs::Runtime::ExpiredResourceCleanup, time: '00:30' },
+      { name: 'expired_orphaned_blob_cleanup', class: Jobs::Runtime::ExpiredOrphanedBlobCleanup, time: '01:00' },
+      { name: 'orphaned_blobs_cleanup', class: Jobs::Runtime::OrphanedBlobsCleanup, time: '01:30', priority: Clock::MEDIUM_PRIORITY },
+      { name: 'pollable_job_cleanup', class: Jobs::Runtime::PollableJobCleanup, time: '02:00' },
+    ].freeze
+
+    FREQUENTS = [
+      { name: 'pending_droplets', class: Jobs::Runtime::PendingDropletCleanup },
+      { name: 'pending_builds', class: Jobs::Runtime::PendingBuildCleanup },
     ].freeze
 
     def initialize(config)
@@ -27,7 +34,7 @@ module VCAP::CloudController
       start_frequent_jobs
       start_inline_jobs
 
-      Clockwork.error_handler { |error| @logger.error(error) }
+      Clockwork.error_handler { |error| @logger.error("#{error} (#{error.class.name})") }
       Clockwork.run
     end
 
@@ -37,7 +44,7 @@ module VCAP::CloudController
       clock_opts = {
         name:     'diego_sync',
         interval: @config.dig(:diego_sync, :frequency_in_seconds),
-        timeout: job_timeout(:diego_sync),
+        timeout:  @timeout_calculator.calculate(:diego_sync),
       }
       @clock.schedule_frequent_inline_job(clock_opts) do
         Jobs::Diego::Sync.new
@@ -45,12 +52,15 @@ module VCAP::CloudController
     end
 
     def start_frequent_jobs
-      clock_opts = {
-        name:     'pending_droplets',
-        interval: @config.dig(:pending_droplets, :frequency_in_seconds),
-      }
-      @clock.schedule_frequent_worker_job(clock_opts) do
-        Jobs::Runtime::PendingDropletCleanup.new(@config.dig(:pending_droplets, :expiration_in_seconds))
+      FREQUENTS.each do |job_config|
+        clock_opts = {
+          name:     job_config[:name],
+          interval: @config.dig(job_config[:name].to_sym, :frequency_in_seconds),
+        }
+        @clock.schedule_frequent_worker_job(clock_opts) do
+          klass = job_config[:class]
+          klass.new(@config.dig(job_config[:name].to_sym, :expiration_in_seconds))
+        end
       end
     end
 
@@ -60,6 +70,7 @@ module VCAP::CloudController
         clock_opts = {
           name: cleanup_config[:name],
           at: cleanup_config[:time],
+          priority: cleanup_config[:priority] ? cleanup_config[:priority] : Clock::HIGH_PRIORITY
         }
 
         @clock.schedule_daily_job(clock_opts) do
@@ -67,10 +78,6 @@ module VCAP::CloudController
           cutoff_age_in_days ? klass.new(cutoff_age_in_days) : klass.new
         end
       end
-    end
-
-    def job_timeout(job_name)
-      @timeout_calculator.calculate(job_name)
     end
   end
 end

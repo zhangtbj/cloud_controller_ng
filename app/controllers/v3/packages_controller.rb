@@ -13,8 +13,6 @@ require 'controllers/v3/mixins/sub_resource'
 class PackagesController < ApplicationController
   include SubResource
 
-  before_action :check_read_permissions!, only: [:index, :show, :download]
-
   def index
     message = PackagesListMessage.from_params(subresource_query_params)
     invalid_param!(message.errors.full_messages) unless message.valid?
@@ -88,9 +86,12 @@ class PackagesController < ApplicationController
     package_not_found! unless package && can_read?(package.space.guid, package.space.organization.guid)
     unauthorized! unless can_write?(package.space.guid)
 
-    PackageDelete.new(user_audit_info).delete(package)
+    delete_action = PackageDelete.new(user_audit_info)
+    deletion_job  = VCAP::CloudController::Jobs::DeleteActionJob.new(PackageModel, package.guid, delete_action)
+    job = Jobs::Enqueuer.new(deletion_job, queue: 'cc-generic').enqueue_pollable
 
-    head :no_content
+    url_builder = VCAP::CloudController::Presenters::ApiUrlBuilder.new
+    head HTTP::ACCEPTED, 'Location' => url_builder.build_url(path: "/v3/jobs/#{job.guid}")
   end
 
   def create

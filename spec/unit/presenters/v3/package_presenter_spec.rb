@@ -32,30 +32,45 @@ module VCAP::CloudController::Presenters::V3
 
           expect(result[:links][:download][:href]).to eq("#{link_prefix}/v3/packages/#{package.guid}/download")
           expect(result[:links][:download][:method]).to eq('GET')
-
-          expect(result[:links][:stage][:href]).to eq("#{link_prefix}/v3/packages/#{package.guid}/droplets")
-          expect(result[:links][:stage][:method]).to eq('POST')
         end
       end
 
       context 'when the package type is docker' do
         let(:package) do
-          VCAP::CloudController::PackageModel.make(type: 'docker', docker_image: 'registry/image:latest')
+          VCAP::CloudController::PackageModel.make(
+            type: 'docker',
+            docker_image: 'registry/image:latest',
+            docker_username: 'jarjarbinks',
+            docker_password: 'meesaPassword'
+          )
         end
 
         it 'presents the docker information in the data section' do
           data = result[:data]
           expect(data[:image]).to eq('registry/image:latest')
-        end
-
-        it 'includes links to stage' do
-          expect(result[:links][:stage][:href]).to eq("#{link_prefix}/v3/packages/#{package.guid}/droplets")
-          expect(result[:links][:stage][:method]).to eq('POST')
+          expect(data[:username]).to eq('jarjarbinks')
+          expect(data[:password]).to eq('***')
         end
 
         it 'does not include upload or download links' do
           expect(result[:links]).not_to include(:upload)
           expect(result[:links]).not_to include(:download)
+        end
+
+        context 'when no docker credentials are present' do
+          let(:package) do
+            VCAP::CloudController::PackageModel.make(
+              type: 'docker',
+              docker_image: 'registry/image:latest',
+            )
+          end
+
+          it 'displays null for username and password' do
+            data = result[:data]
+            expect(data[:image]).to eq('registry/image:latest')
+            expect(data[:username]).to be_nil
+            expect(data[:password]).to be_nil
+          end
         end
       end
 

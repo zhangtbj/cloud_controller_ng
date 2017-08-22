@@ -37,6 +37,16 @@ module VCAP::CloudController
       @relationships_message ||= Relationships.new(relationships.deep_symbolize_keys)
     end
 
+    def audit_hash
+      result = super
+
+      if result['data']
+        result['data'][:password] = VCAP::CloudController::Presenters::V3::PackagePresenter::REDACTED_MESSAGE
+      end
+
+      result
+    end
+
     private
 
     class Relationships < BaseMessage
@@ -48,7 +58,7 @@ module VCAP::CloudController
 
       validates_with NoAdditionalKeysValidator
 
-      validates :app, presence: true, allow_nil: false, to_one_relationship_2: true
+      validates :app, presence: true, allow_nil: false, to_one_relationship: true
 
       def app_guid
         HashUtils.dig(app, :data, :guid)

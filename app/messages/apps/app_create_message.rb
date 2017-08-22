@@ -20,7 +20,6 @@ module VCAP::CloudController
 
     validates :name, string: true
     validates :environment_variables, hash: true, allow_nil: true
-    validates :relationships, hash: true, allow_nil: false
 
     validates :lifecycle_type,
       string: true,
@@ -58,7 +57,7 @@ module VCAP::CloudController
 
       validates_with NoAdditionalKeysValidator
 
-      validates :space, presence: true, allow_nil: false, to_one_relationship_2: true
+      validates :space, presence: true, allow_nil: false, to_one_relationship: true
 
       def space_guid
         HashUtils.dig(space, :data, :guid)

@@ -24,16 +24,16 @@ module VCAP
           it_behaves_like 'a lifecycle protocol' do
             let(:app) { AppModel.make }
             let(:package) { PackageModel.make(app_guid: app.guid) }
-            let(:droplet) { DropletModel.make(:staged, package_guid: package.guid, app_guid: app.guid) }
-            let(:process) { App.make(app: app) }
+            let(:droplet) { DropletModel.make(package_guid: package.guid, app_guid: app.guid) }
+            let(:process) { ProcessModel.make(app: app) }
             let(:staging_details) do
               Diego::StagingDetails.new.tap do |details|
-                details.droplet   = droplet
-                details.package   = package
-                details.lifecycle = instance_double(BuildpackLifecycle, staging_stack: 'potato-stack', buildpack_info: buildpack_info)
+                details.staging_guid = droplet.guid
+                details.package      = package
+                details.lifecycle    = instance_double(BuildpackLifecycle, staging_stack: 'potato-stack', buildpack_infos: buildpack_infos)
               end
             end
-            let(:buildpack_info) { BuildpackInfo.new('http://some-buildpack.url', nil) }
+            let(:buildpack_infos) { [BuildpackInfo.new('http://some-buildpack.url', nil)] }
 
             before do
               app.update(droplet_guid: droplet.guid)
@@ -50,27 +50,29 @@ module VCAP
             let(:package) { PackageModel.make(app: app) }
             let(:droplet) { DropletModel.make(package: package, app: app) }
             let(:buildpack) { nil }
-            let(:buildpack_info) { BuildpackInfo.new(buildpack, VCAP::CloudController::Buildpack.find(name: buildpack)) }
+            let(:buildpack_infos) { [BuildpackInfo.new(buildpack, VCAP::CloudController::Buildpack.find(name: buildpack))] }
 
             let(:staging_details) do
               Diego::StagingDetails.new.tap do |details|
-                details.droplet               = droplet
+                details.staging_guid          = droplet.guid
                 details.package               = package
                 details.environment_variables = { 'nightshade_fruit' => 'potato' }
                 details.staging_memory_in_mb  = 42
                 details.staging_disk_in_mb    = 51
-                details.lifecycle             = instance_double(BuildpackLifecycle, staging_stack: 'potato-stack', buildpack_info: buildpack_info)
+                details.lifecycle             = instance_double(BuildpackLifecycle, staging_stack: 'potato-stack', buildpack_infos: buildpack_infos)
               end
             end
 
             context 'when auto-detecting' do
-              it 'sends buildpacks without skip_detect' do
+              let(:buildpack_infos) { [] }
+
+              it 'sends buildpacks setting skip_detect to false' do
                 lifecycle_data = lifecycle_protocol.lifecycle_data(staging_details)
 
                 expect(lifecycle_data[:buildpacks]).to have(1).items
                 bp = lifecycle_data[:buildpacks][0]
                 expect(bp).to include(name: 'ruby')
-                expect(bp).to_not include(:skip_detect)
+                expect(bp).to include(skip_detect: false)
               end
             end
 
@@ -99,6 +101,8 @@ module VCAP
             end
 
             context 'when the generated message has invalid data' do
+              let(:buildpack_infos) { [] }
+
               context 'when the package is missing a download uri (probably due to blobstore outages)' do
                 before do
                   allow(blobstore_url_generator).to receive(:package_download_url).and_return(nil)
@@ -129,18 +133,18 @@ module VCAP
             let(:app) { AppModel.make }
             let(:package) { PackageModel.make(app_guid: app.guid) }
             let(:droplet) do
-              DropletModel.make(:staged,
+              DropletModel.make(
                 package_guid:    package.guid,
                 app_guid:        app.guid,
                 droplet_hash:    'droplet-sha1-checksum',
                 sha256_checksum: 'droplet-sha256-checksum',
               )
             end
-            let(:process) { App.make(app: app, command: 'command from app', metadata: {}) }
+            let(:process) { ProcessModel.make(app: app, command: 'command from app', metadata: {}) }
             let(:staging_details) do
               Diego::StagingDetails.new.tap do |details|
                 details.droplet   = droplet
-                details.lifecycle = instance_double(BuildpackLifecycle, staging_stack: 'potato-stack', buildpack_info: buildpack_info)
+                details.lifecycle = instance_double(BuildpackLifecycle, staging_stack: 'potato-stack', buildpack_infos: buildpack_infos)
               end
             end
 
@@ -203,9 +207,9 @@ module VCAP
             let(:droplet) { DropletModel.make }
             let(:staging_details) do
               StagingDetails.new.tap do |details|
-                details.lifecycle = instance_double(BuildpackLifecycle, staging_stack: 'potato-stack', buildpack_info: 'some buildpack info')
-                details.package   = package
-                details.droplet   = droplet
+                details.lifecycle    = instance_double(BuildpackLifecycle, staging_stack: 'potato-stack', buildpack_infos: 'some buildpack info')
+                details.package      = package
+                details.staging_guid = droplet.guid
               end
             end
 
@@ -268,9 +272,7 @@ module VCAP
           describe '#desired_lrp_builder' do
             let(:config) { {} }
             let(:app) { AppModel.make(droplet: droplet) }
-            let(:droplet) do
-              DropletModel.make(state: DropletModel::STAGED_STATE)
-            end
+            let(:droplet) { DropletModel.make }
             let(:process) do
               ProcessModel.make(
                 app:      app,
@@ -286,8 +288,8 @@ module VCAP
                 droplet_uri:        'www.droplet.com',
                 droplet_hash:       droplet.droplet_hash,
                 process_guid:       ProcessGuid.from_process(process),
-                checksum_algorithm: 'sha1',
-                checksum_value:     droplet.droplet_hash,
+                checksum_algorithm: 'sha256',
+                checksum_value:     droplet.sha256_checksum,
                 start_command:      'go go go',
               }
             end

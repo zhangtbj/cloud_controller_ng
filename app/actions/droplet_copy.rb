@@ -7,11 +7,10 @@ module VCAP::CloudController
       :salt,
       :process_types,
       :buildpack_receipt_buildpack,
-      :buildpack_receipt_stack_name,
       :execution_metadata,
-      :staging_memory_in_mb,
-      :staging_disk_in_mb,
-      :docker_receipt_image
+      :docker_receipt_image,
+      :docker_receipt_username,
+      :docker_receipt_password,
     ].freeze
 
     def initialize(source_droplet)
@@ -56,10 +55,10 @@ module VCAP::CloudController
       # because mysql will deadlock when requests happen concurrently otherwise.
       BuildpackLifecycleDataModel.create(
         stack:     @source_droplet.buildpack_lifecycle_data.stack,
-        buildpack: @source_droplet.buildpack_lifecycle_data.buildpack,
+        buildpacks: @source_droplet.buildpack_lifecycle_data.buildpacks,
         droplet:   new_droplet,
       )
-      new_droplet.buildpack_lifecycle_data(true) # reload buildpack_lifecycle_data association
+      new_droplet.buildpack_lifecycle_data(reload: true)
 
       copy_job = Jobs::V3::DropletBitsCopier.new(@source_droplet.guid, new_droplet.guid)
       Jobs::Enqueuer.new(copy_job, queue: 'cc-generic').enqueue

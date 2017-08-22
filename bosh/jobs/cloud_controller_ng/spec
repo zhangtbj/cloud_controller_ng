@@ -4,38 +4,51 @@ name: cloud_controller_ng
 description: "The Cloud Controller provides primary Cloud Foundry API that is by the CF CLI. The Cloud Controller uses a database to keep tables for organizations, spaces, apps, services, service instances, user roles, and more. Typically multiple instances of Cloud Controller are load balanced."
 
 templates:
-  nginx_ctl.erb: bin/nginx_ctl
-  nginx.conf.erb: config/nginx.conf
-  drain.rb: bin/drain
-  restart_drain.rb: bin/restart_drain
-  mime.types: config/mime.types
-  cloud_controller_api.yml.erb: config/cloud_controller_ng.yml
-  cloud_controller_api_ctl.erb: bin/cloud_controller_ng_ctl
-  cloud_controller_api_worker_ctl.erb: bin/cloud_controller_worker_ctl
-  setup_local_blobstore.sh.erb: bin/setup_local_blobstore.sh
-  stacks.yml.erb: config/stacks.yml
-  newrelic.yml.erb: config/newrelic.yml
-  nginx_newrelic_plugin_ctl.erb: bin/nginx_newrelic_plugin_ctl
-  newrelic_plugin.yml.erb: config/newrelic_plugin.yml
-  ruby_version.sh.erb: bin/ruby_version.sh
-  console.erb: bin/console
-  dns_health_check.erb: bin/dns_health_check
+  bin/cloud_controller_ng.erb: bin/cloud_controller_ng
+  bin/local_worker.erb: bin/local_worker
+  bin/nginx_newrelic_plugin.erb: bin/nginx_newrelic_plugin
+  bpm/cloud_controller_ng.yml.erb: config/bpm/cloud_controller_ng.yml
+  bpm/local_worker.yml.erb: config/bpm/local_worker.yml
+  bpm/nginx.yml.erb: config/bpm/nginx.yml
+  bpm/nginx_newrelic_plugin.yml.erb: config/bpm/nginx_newrelic_plugin.yml
+
+  cloud_controller_ng.yml.erb: config/cloud_controller_ng.yml
   blobstore_waiter.sh.erb: bin/blobstore_waiter.sh
   buildpacks_ca_cert.pem.erb: config/certs/buildpacks_ca_cert.pem
-  droplets_ca_cert.pem.erb: config/certs/droplets_ca_cert.pem
-  packages_ca_cert.pem.erb: config/certs/packages_ca_cert.pem
-  resource_pool_ca_cert.pem.erb: config/certs/resource_pool_ca_cert.pem
+  cc-drain.rb: bin/cc-drain
+  cloud_controller_api_ctl.erb: bin/cloud_controller_ng_ctl
+  cloud_controller_api_health_check.erb: bin/cloud_controller_ng_health_check
+  cloud_controller_api_worker_ctl.erb: bin/cloud_controller_worker_ctl
+  console.erb: bin/console
   dea_ca.crt.erb: config/certs/dea_ca.crt
   dea_client.crt.erb: config/certs/dea_client.crt
   dea_client.key.erb: config/certs/dea_client.key
-  mutual_tls_ca.crt.erb: config/certs/mutual_tls_ca.crt
+  dns_health_check.erb: bin/dns_health_check
+  drain.sh.erb: bin/drain
+  droplets_ca_cert.pem.erb: config/certs/droplets_ca_cert.pem
+  migrate_db.sh.erb: bin/migrate_db
+  mime.types: config/mime.types
   mutual_tls.crt.erb: config/certs/mutual_tls.crt
   mutual_tls.key.erb: config/certs/mutual_tls.key
-  pre-start.sh.erb: bin/pre-start
+  mutual_tls_ca.crt.erb: config/certs/mutual_tls_ca.crt
+  newrelic.yml.erb: config/newrelic.yml
+  newrelic_plugin.yml.erb: config/newrelic_plugin.yml
+  nginx.conf.erb: config/nginx.conf
+  nginx_ctl.erb: bin/nginx_ctl
+  nginx_newrelic_plugin_ctl.erb: bin/nginx_newrelic_plugin_ctl
+  packages_ca_cert.pem.erb: config/certs/packages_ca_cert.pem
   post-start.sh.erb: bin/post-start
-  migrate_db.sh.erb: bin/migrate_db
+  pre-start.sh.erb: bin/pre-start
+  public_upload.conf.erb: config/public_upload.conf
+  resource_pool_ca_cert.pem.erb: config/certs/resource_pool_ca_cert.pem
+  restart_drain.rb: bin/restart_drain
+  ruby_version.sh.erb: bin/ruby_version.sh
   seed_db.sh.erb: bin/seed_db
+  setup_local_blobstore.sh.erb: bin/setup_local_blobstore.sh
+  stacks.yml.erb: config/stacks.yml
   uaa_ca.crt.erb: config/certs/uaa_ca.crt
+  db_ca.crt.erb: config/certs/db_ca.crt
+
 
 packages:
   - capi_utils
@@ -43,7 +56,7 @@ packages:
   - nginx
   - nginx_newrelic_plugin
   - libpq
-  - libmariadb
+  - mariadb_connector_c
   - ruby-2.3
 
 provides:
@@ -54,11 +67,18 @@ provides:
   - app_domains
 
 consumes:
-- name: nats
-  type: nats
+- name: database
+  type: database
+  optional: true
+- name: cc_uploader
+  type: cc_uploader
   optional: true
 
 properties:
+  bpm.enabled:
+    description: "Experimental feature flag: Enable Bosh Process Manager"
+    default: false
+
   ssl.skip_cert_verify:
     description: "specifies that the job is allowed to skip ssl cert verification"
     default: false
@@ -93,15 +113,6 @@ properties:
   app_ssh.oauth_client_id:
     description: "The oauth client ID of the SSH proxy"
     default: ssh-proxy
-
-  nats.user:
-    description: "Username for cc client to connect to NATS. Deprecated in favor of nats link."
-  nats.password:
-    description: "Password for cc client to connect to NATS. Deprecated in favor of nats link."
-  nats.port:
-    description: "IP port of Cloud Foundry NATS server. Deprecated in favor of nats link."
-  nats.machines:
-    description: "IP of each NATS cluster member. Deprecated in favor of nats link, which will be used if this is not provided."
 
   nfs_server.address:
     description: "NFS server for droplets and apps (not used in an AWS deploy, use s3 instead)"
@@ -150,8 +161,6 @@ properties:
     default: 14400 # 4 hours
   cc.jobs.app_bits_packer.timeout_in_seconds:
     description: "The longest this job can take before it is cancelled"
-  cc.jobs.app_events_cleanup.timeout_in_seconds:
-    description: "The longest this job can take before it is cancelled"
   cc.jobs.app_usage_events_cleanup.timeout_in_seconds:
     description: "The longest this job can take before it is cancelled"
   cc.jobs.blobstore_delete.timeout_in_seconds:
@@ -163,9 +172,6 @@ properties:
   cc.jobs.droplet_upload.timeout_in_seconds:
     description: "The longest this job can take before it is cancelled"
 
-  cc.app_events.cutoff_age_in_days:
-    description: "How old an app event should stay in cloud controller database before being cleaned up"
-    default: 31
   cc.app_usage_events.cutoff_age_in_days:
     description: "How old an app usage event should stay in cloud controller database before being cleaned up"
     default: 31
@@ -355,7 +361,7 @@ properties:
     description: "The ca cert to use when communicating with webdav"
     default: ""
   cc.packages.app_package_directory_key:
-    description: "Directory (bucket) used store app packages.  It does not have be pre-created."
+    description: "Directory (bucket) used store app packages.  It does not have be pre-created.  Should contain only alphanumeric characters, '-', '_', and '.'"
     default: "cc-packages"
   cc.packages.max_package_size:
     description: "Maximum size of application package"
@@ -400,7 +406,7 @@ properties:
     description: "The ca cert to use when communicating with webdav"
     default: ""
   cc.droplets.droplet_directory_key:
-    description: "Directory (bucket) used store droplets.  It does not have be pre-created."
+    description: "Directory (bucket) used store droplets.  It does not have be pre-created.  Should contain only alphanumeric characters, '-', '_', and '.'"
     default: "cc-droplets"
   cc.droplets.max_staged_droplets_stored:
     description: "Number of recent, staged droplets stored per app (not including current droplet)"
@@ -442,7 +448,7 @@ properties:
     description: "The ca cert to use when communicating with webdav"
     default: ""
   cc.buildpacks.buildpack_directory_key:
-    description: "Directory (bucket) used store buildpacks.  It does not have be pre-created."
+    description: "Directory (bucket) used store buildpacks.  It does not have be pre-created.  Should contain only alphanumeric characters, '-', '_', and '.'"
     default: "cc-buildpacks"
   cc.buildpacks.fog_connection:
     description: "Fog connection hash"
@@ -477,6 +483,12 @@ properties:
   ccdb.pool_timeout:
     default: 10
     description: "The timeout for Sequel pooled connections"
+  ccdb.ca_cert:
+    default: ~
+    description: "The ca cert to use when communicating with the database over SSL"
+  ccdb.ssl_verify_hostname:
+    default: false
+    description: "Verify that the database SSL certificate matches the host to which the connection is attempted"
 
   uaa.cc.token_secret:
     description: "Symmetric secret used to decode uaa tokens. Used for testing."
@@ -515,16 +527,6 @@ properties:
     description: "The port used to emit messages to the Metron agent"
     default: 3457
 
-  logger_endpoint.use_ssl:
-    description: "Whether to use ssl for logger endpoint listed at /v2/info"
-    default: true
-  logger_endpoint.port:
-    description: "Port for logger endpoint listed at /v2/info"
-    default: 443
-
-  doppler.enabled:
-    description: "Whether to expose the doppler_logging_endpoint listed at /v2/info"
-    default: true
   doppler.use_ssl:
     description: "Whether to use ssl for the doppler_logging_endpoint listed at /v2/info"
     default: true
@@ -548,9 +550,6 @@ properties:
   cc.users_can_select_backend:
     default: true
     description: "Allow non-admin users to switch their apps between DEA and Diego backends"
-  cc.default_to_diego_backend:
-    default: false
-    description: "Use Diego backend by default for new apps"
   cc.allow_app_ssh_access:
     default: true
     description: "Allow users to change the value of the app-level allow_ssh attribute"
@@ -643,6 +642,10 @@ properties:
         location: ~ ^/v2/spaces/(.*)
         limit: 10r/s
         burst: 100
+
+  cc.server_keepalive_timeout:
+    description: "Configure keep alive timeout for connections to cloud controller. This is a temporary field used for testing."
+    default: 75
 
   cc.jobs.local.number_of_workers:
     default: 2
@@ -835,8 +838,11 @@ properties:
     description: "URL of file server"
     default: http://file-server.service.cf.internal:8080
   cc.diego.cc_uploader_url:
-    description: "URL of cc uploader"
+    description: "URL of cc uploader. Not used if BOSH link 'cc_uploader' is present."
     default: http://cc-uploader.service.cf.internal:9090
+  cc.diego.cc_uploader_https_url:
+    description: "URL of cc uploader. Not used if BOSH link 'cc_uploader' is present."
+    default: https://cc-uploader.service.cf.internal:9091
   cc.diego.use_privileged_containers_for_running:
     description: "Whether or not to use privileged containers for running buildpack apps and tasks."
     default: false
@@ -877,6 +883,8 @@ properties:
   cc.diego.temporary_droplet_download_mtls:
     description: "Temporary flag to enable mTLS droplet download to the bbs from cc"
     default: false
+  cc.diego.temporary_oci_buildpack_mode:
+    description: "Temporary flag to enable OCI buildpack flow. Valid values: 'oci-phase-1'"
   cc.diego.pid_limit:
     description: "Maximum pid limit for containerized work running user-provided code"
     default: 1024

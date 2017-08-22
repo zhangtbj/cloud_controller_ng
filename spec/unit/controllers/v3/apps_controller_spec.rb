@@ -10,8 +10,8 @@ RSpec.describe AppsV3Controller, type: :controller do
     before do
       set_current_user(user)
       allow_user_read_access_for(user, spaces: [space_1])
-      VCAP::CloudController::BuildpackLifecycleDataModel.make(app: app_model_1, buildpack: nil, stack: VCAP::CloudController::Stack.default.name)
-      VCAP::CloudController::BuildpackLifecycleDataModel.make(app: app_model_2, buildpack: nil, stack: VCAP::CloudController::Stack.default.name)
+      VCAP::CloudController::BuildpackLifecycleDataModel.make(app: app_model_1, buildpacks: nil, stack: VCAP::CloudController::Stack.default.name)
+      VCAP::CloudController::BuildpackLifecycleDataModel.make(app: app_model_2, buildpacks: nil, stack: VCAP::CloudController::Stack.default.name)
     end
 
     it 'returns 200 and lists the apps for spaces user is allowed to read' do
@@ -29,9 +29,9 @@ RSpec.describe AppsV3Controller, type: :controller do
 
       before do
         allow_user_global_read_access(user)
-        VCAP::CloudController::BuildpackLifecycleDataModel.make(app: app_model_1, buildpack: nil, stack: VCAP::CloudController::Stack.default.name)
-        VCAP::CloudController::BuildpackLifecycleDataModel.make(app: app_model_2, buildpack: nil, stack: VCAP::CloudController::Stack.default.name)
-        VCAP::CloudController::BuildpackLifecycleDataModel.make(app: app_model_3, buildpack: nil, stack: VCAP::CloudController::Stack.default.name)
+        VCAP::CloudController::BuildpackLifecycleDataModel.make(app: app_model_1, buildpacks: nil, stack: VCAP::CloudController::Stack.default.name)
+        VCAP::CloudController::BuildpackLifecycleDataModel.make(app: app_model_2, buildpacks: nil, stack: VCAP::CloudController::Stack.default.name)
+        VCAP::CloudController::BuildpackLifecycleDataModel.make(app: app_model_3, buildpacks: nil, stack: VCAP::CloudController::Stack.default.name)
       end
 
       it 'fetches all the apps' do
@@ -63,7 +63,7 @@ RSpec.describe AppsV3Controller, type: :controller do
 
           expect(response.status).to eq 400
           expect(response.body).to include 'BadQueryParameter'
-          expect(response.body).to include("Order by can only be 'created_at' or 'updated_at'")
+          expect(response.body).to include("Order by can only be: 'created_at', 'updated_at', 'name'")
         end
       end
 
@@ -98,7 +98,7 @@ RSpec.describe AppsV3Controller, type: :controller do
       set_current_user(user)
       allow_user_read_access_for(user, spaces: [space])
       allow_user_secret_access(user, space: space)
-      VCAP::CloudController::BuildpackLifecycleDataModel.make(app: app_model, buildpack: nil, stack: VCAP::CloudController::Stack.default.name)
+      VCAP::CloudController::BuildpackLifecycleDataModel.make(app: app_model, buildpacks: nil, stack: VCAP::CloudController::Stack.default.name)
     end
 
     it 'returns a 200 and the app' do
@@ -330,7 +330,7 @@ RSpec.describe AppsV3Controller, type: :controller do
 
         expect(response).to have_status_code(422)
         expect(response.body).to include 'UnprocessableEntity'
-        expect(response.body).to include('Space is invalid. Ensure it exists and you have access to it.')
+        expect(response.body).to include('Invalid space. Ensure that the space exists and you have access to it.')
       end
     end
 
@@ -382,7 +382,7 @@ RSpec.describe AppsV3Controller, type: :controller do
 
           expect(response).to have_status_code(422)
           expect(response.body).to include 'UnprocessableEntity'
-          expect(response.body).to include('Space is invalid. Ensure it exists and you have access to it.')
+          expect(response.body).to include('Invalid space. Ensure that the space exists and you have access to it.')
         end
       end
 
@@ -408,8 +408,9 @@ RSpec.describe AppsV3Controller, type: :controller do
         it 'returns an Unauthorized error' do
           post :create, body: req_body
 
-          expect(response.status).to eq(403)
-          expect(response.body).to include 'NotAuthorized'
+          expect(response.status).to eq(422)
+          expect(response.body).to include 'UnprocessableEntity'
+          expect(response.body).to include('Invalid space. Ensure that the space exists and you have access to it.')
         end
       end
     end
@@ -431,7 +432,7 @@ RSpec.describe AppsV3Controller, type: :controller do
     end
 
     it 'returns a 200 OK and the app' do
-      put :update, guid: app_model.guid, body: req_body
+      patch :update, guid: app_model.guid, body: req_body
 
       expect(response.status).to eq 200
       expect(parsed_body['guid']).to eq(app_model.guid)
@@ -443,7 +444,7 @@ RSpec.describe AppsV3Controller, type: :controller do
 
       context 'when the app is invalid' do
         it 'returns an UnprocessableEntity error' do
-          put :update, guid: app_model.guid, body: req_body
+          patch :update, guid: app_model.guid, body: req_body
 
           expect(response.status).to eq 422
           expect(response.body).to include 'UnprocessableEntity'
@@ -453,6 +454,10 @@ RSpec.describe AppsV3Controller, type: :controller do
 
     context 'lifecycle data' do
       let(:new_name) { 'potato' }
+      before do
+        VCAP::CloudController::Buildpack.make(name: 'some-buildpack-name')
+        VCAP::CloudController::Buildpack.make(name: 'some-buildpack')
+      end
 
       context 'when the space developer does not request lifecycle' do
         let(:req_body) do
@@ -463,13 +468,13 @@ RSpec.describe AppsV3Controller, type: :controller do
 
         context 'buildpack app' do
           before do
-            app_model.lifecycle_data.stack     = 'some-stack-name'
-            app_model.lifecycle_data.buildpack = 'some-buildpack-name'
+            app_model.lifecycle_data.stack      = 'some-stack-name'
+            app_model.lifecycle_data.buildpacks = ['some-buildpack-name', 'http://buildpack.com']
             app_model.lifecycle_data.save
           end
 
           it 'uses the existing lifecycle on app' do
-            put :update, guid: app_model.guid, body: req_body
+            patch :update, guid: app_model.guid, body: req_body
             expect(response.status).to eq 200
 
             app_model.reload
@@ -477,7 +482,7 @@ RSpec.describe AppsV3Controller, type: :controller do
 
             expect(app_model.name).to eq(new_name)
             expect(app_model.lifecycle_data.stack).to eq('some-stack-name')
-            expect(app_model.lifecycle_data.buildpack).to eq('some-buildpack-name')
+            expect(app_model.lifecycle_data.buildpacks).to eq(['some-buildpack-name', 'http://buildpack.com'])
           end
         end
 
@@ -485,7 +490,7 @@ RSpec.describe AppsV3Controller, type: :controller do
           let(:app_model) { VCAP::CloudController::AppModel.make(:docker) }
 
           it 'uses the existing lifecycle on app' do
-            put :update, guid: app_model.guid, body: req_body
+            patch :update, guid: app_model.guid, body: req_body
             expect(response.status).to eq 200
 
             app_model.reload
@@ -506,7 +511,7 @@ RSpec.describe AppsV3Controller, type: :controller do
           end
 
           it 'returns an UnprocessableEntity error' do
-            put :update, guid: app_model.guid, body: req_body
+            patch :update, guid: app_model.guid, body: req_body
 
             expect(response.status).to eq 422
             expect(response.body).to include 'UnprocessableEntity'
@@ -527,8 +532,8 @@ RSpec.describe AppsV3Controller, type: :controller do
           end
 
           it 'sets the buildpack to the provided buildpack' do
-            put :update, guid: app_model.guid, body: req_body
-            expect(app_model.reload.lifecycle_data.buildpack).to eq(buildpack_url)
+            patch :update, guid: app_model.guid, body: req_body
+            expect(app_model.reload.lifecycle_data.buildpacks).to eq([buildpack_url])
           end
         end
 
@@ -544,14 +549,14 @@ RSpec.describe AppsV3Controller, type: :controller do
           end
 
           before do
-            app_model.lifecycle_data.buildpack = 'some-buildpack'
+            app_model.lifecycle_data.buildpacks = ['some-buildpack']
             app_model.lifecycle_data.save
           end
 
           it 'sets the buildpack to nil' do
-            expect(app_model.lifecycle_data.buildpack).to_not be_nil
-            put :update, guid: app_model.guid, body: req_body
-            expect(app_model.reload.lifecycle_data.buildpack).to be_nil
+            expect(app_model.lifecycle_data.buildpacks).to_not be_empty
+            patch :update, guid: app_model.guid, body: req_body
+            expect(app_model.reload.lifecycle_data.buildpacks).to be_empty
           end
         end
 
@@ -572,7 +577,7 @@ RSpec.describe AppsV3Controller, type: :controller do
             before(:each) { VCAP::CloudController::Stack.create(name: 'redhat') }
 
             it 'sets the stack to the user provided stack' do
-              put :update, guid: app_model.guid, body: req_body
+              patch :update, guid: app_model.guid, body: req_body
               expect(app_model.lifecycle_data.stack).to eq('redhat')
             end
           end
@@ -591,7 +596,7 @@ RSpec.describe AppsV3Controller, type: :controller do
             end
 
             it 'returns an UnprocessableEntity error' do
-              put :update, guid: app_model.guid, body: req_body
+              patch :update, guid: app_model.guid, body: req_body
 
               expect(response.body).to include 'UnprocessableEntity'
               expect(response.status).to eq(422)
@@ -618,7 +623,7 @@ RSpec.describe AppsV3Controller, type: :controller do
 
           it 'does not modify the lifecycle data' do
             expect(app_model.lifecycle_data.stack).to eq VCAP::CloudController::Stack.default.name
-            put :update, guid: app_model.guid, body: req_body
+            patch :update, guid: app_model.guid, body: req_body
             expect(app_model.reload.lifecycle_data.stack).to eq VCAP::CloudController::Stack.default.name
           end
         end
@@ -632,7 +637,7 @@ RSpec.describe AppsV3Controller, type: :controller do
           end
 
           it 'raises an error' do
-            put :update, guid: app_model.guid, body: req_body
+            patch :update, guid: app_model.guid, body: req_body
 
             expect(response.status).to eq 422
             expect(response.body).to include 'UnprocessableEntity'
@@ -649,7 +654,7 @@ RSpec.describe AppsV3Controller, type: :controller do
           end
 
           it 'raises an error' do
-            put :update, guid: app_model.guid, body: req_body
+            patch :update, guid: app_model.guid, body: req_body
 
             expect(response.status).to eq 422
             expect(response.body).to include 'UnprocessableEntity'
@@ -670,7 +675,7 @@ RSpec.describe AppsV3Controller, type: :controller do
           end
 
           it 'raises an error' do
-            put :update, guid: app_model.guid, body: req_body
+            patch :update, guid: app_model.guid, body: req_body
 
             expect(response.status).to eq 422
             expect(response.body).to include 'UnprocessableEntity'
@@ -690,7 +695,7 @@ RSpec.describe AppsV3Controller, type: :controller do
           end
 
           it 'does not fail' do
-            put :update, guid: app_model.guid, body: req_body
+            patch :update, guid: app_model.guid, body: req_body
             expect(response).to have_status_code(200)
           end
         end
@@ -704,7 +709,7 @@ RSpec.describe AppsV3Controller, type: :controller do
           end
 
           it 'raises an error' do
-            put :update, guid: app_model.guid, body: req_body
+            patch :update, guid: app_model.guid, body: req_body
 
             expect(response.status).to eq 422
             expect(response.body).to include 'UnprocessableEntity'
@@ -726,7 +731,7 @@ RSpec.describe AppsV3Controller, type: :controller do
         end
 
         it 'returns a 404 ResourceNotFound error' do
-          put :update, guid: app_model.guid, body: req_body
+          patch :update, guid: app_model.guid, body: req_body
 
           expect(response.status).to eq 404
           expect(response.body).to include 'ResourceNotFound'
@@ -740,7 +745,7 @@ RSpec.describe AppsV3Controller, type: :controller do
         end
 
         it 'raises ApiError NotAuthorized' do
-          put :update, guid: app_model.guid, body: req_body
+          patch :update, guid: app_model.guid, body: req_body
 
           expect(response.status).to eq 403
           expect(response.body).to include 'NotAuthorized'
@@ -754,18 +759,14 @@ RSpec.describe AppsV3Controller, type: :controller do
     let(:space) { app_model.space }
     let(:org) { space.organization }
     let(:user) { set_current_user(VCAP::CloudController::User.make) }
+    let(:app_delete_stub) { instance_double(VCAP::CloudController::AppDelete) }
 
     before do
       allow_user_read_access_for(user, spaces: [space])
       allow_user_write_access(user, space: space)
-      VCAP::CloudController::BuildpackLifecycleDataModel.make(app: app_model, buildpack: nil, stack: VCAP::CloudController::Stack.default.name)
-    end
-
-    it 'returns a 204' do
-      delete :destroy, guid: app_model.guid
-
-      expect(response.status).to eq 204
-      expect { app_model.reload }.to raise_error(Sequel::Error, 'Record not found')
+      VCAP::CloudController::BuildpackLifecycleDataModel.make(app: app_model, buildpacks: nil, stack: VCAP::CloudController::Stack.default.name)
+      allow(VCAP::CloudController::Jobs::DeleteActionJob).to receive(:new).and_call_original
+      allow(VCAP::CloudController::AppDelete).to receive(:new).and_return(app_delete_stub)
     end
 
     context 'permissions' do
@@ -819,18 +820,38 @@ RSpec.describe AppsV3Controller, type: :controller do
       end
     end
 
-    context 'when AppDelete::InvalidDelete is raised' do
-      before do
-        allow_any_instance_of(VCAP::CloudController::AppDelete).to receive(:delete).
-          and_raise(VCAP::CloudController::AppDelete::InvalidDelete.new('it is broke'))
-      end
+    it 'successfully deletes the app in a background job' do
+      delete :destroy, guid: app_model.guid
 
-      it 'returns a 400' do
+      app_delete_jobs = Delayed::Job.where(Sequel.lit("handler like '%AppDelete%'"))
+      expect(app_delete_jobs.count).to eq 1
+      app_delete_jobs.first
+
+      expect(VCAP::CloudController::AppModel.find(guid: app_model.guid)).not_to be_nil
+      expect(VCAP::CloudController::Jobs::DeleteActionJob).to have_received(:new).with(
+        VCAP::CloudController::AppModel,
+        app_model.guid,
+        app_delete_stub,
+      )
+    end
+
+    it 'creates a job to track the deletion and returns it in the location header' do
+      expect {
         delete :destroy, guid: app_model.guid
+      }.to change {
+        VCAP::CloudController::PollableJobModel.count
+      }.by(1)
 
-        expect(response.status).to eq 422
-        expect(response.body).to include 'it is broke'
-      end
+      job          = VCAP::CloudController::PollableJobModel.last
+      enqueued_job = Delayed::Job.last
+      expect(job.delayed_job_guid).to eq(enqueued_job.guid)
+      expect(job.operation).to eq('app.delete')
+      expect(job.state).to eq('PROCESSING')
+      expect(job.resource_guid).to eq(app_model.guid)
+      expect(job.resource_type).to eq('app')
+
+      expect(response.status).to eq(202)
+      expect(response.headers['Location']).to include "#{link_prefix}/v3/jobs/#{job.guid}"
     end
   end
 
@@ -844,7 +865,7 @@ RSpec.describe AppsV3Controller, type: :controller do
     before do
       allow_user_read_access_for(user, spaces: [space])
       allow_user_write_access(user, space: space)
-      VCAP::CloudController::BuildpackLifecycleDataModel.make(app: app_model, buildpack: nil, stack: VCAP::CloudController::Stack.default.name)
+      VCAP::CloudController::BuildpackLifecycleDataModel.make(app: app_model, buildpacks: nil, stack: VCAP::CloudController::Stack.default.name)
     end
 
     it 'returns a 200 and the app' do
@@ -984,7 +1005,7 @@ RSpec.describe AppsV3Controller, type: :controller do
       set_current_user(user)
       allow_user_read_access_for(user, spaces: [space])
       allow_user_write_access(user, space: space)
-      VCAP::CloudController::BuildpackLifecycleDataModel.make(app: app_model, buildpack: nil, stack: VCAP::CloudController::Stack.default.name)
+      VCAP::CloudController::BuildpackLifecycleDataModel.make(app: app_model, buildpacks: nil, stack: VCAP::CloudController::Stack.default.name)
     end
 
     it 'returns a 200 and the app' do
@@ -1073,7 +1094,7 @@ RSpec.describe AppsV3Controller, type: :controller do
       set_current_user(user)
       allow_user_read_access_for(user, spaces: [space])
       allow_user_write_access(user, space: space)
-      VCAP::CloudController::BuildpackLifecycleDataModel.make(app: app_model, buildpack: nil, stack: VCAP::CloudController::Stack.default.name)
+      VCAP::CloudController::BuildpackLifecycleDataModel.make(app: app_model, buildpacks: nil, stack: VCAP::CloudController::Stack.default.name)
     end
 
     it 'returns 200 and the environment variables' do
@@ -1211,11 +1232,13 @@ RSpec.describe AppsV3Controller, type: :controller do
 
     let(:expected_success_response) do
       {
-        'meep' => 'moop',
-        'beep' => 'boop',
+        'var' => {
+          'meep' => 'moop',
+          'beep' => 'boop'
+        },
         'links' => {
           'self' => { 'href' => "#{link_prefix}/v3/apps/#{app_model.guid}/environment_variables" },
-          'app' => { 'href' => "#{link_prefix}/v3/apps/#{app_model.guid}" }
+          'app'  => { 'href' => "#{link_prefix}/v3/apps/#{app_model.guid}" }
         }
       }
     end
@@ -1226,15 +1249,15 @@ RSpec.describe AppsV3Controller, type: :controller do
 
     describe 'permissions by role' do
       role_to_expected_http_response = {
-        'space_developer' => 200,
-        'org_manager' => 403,
-        'org_user' => 404,
-        'space_manager' => 403,
-        'space_auditor' => 403,
-        'org_auditor' => 404,
+        'space_developer'     => 200,
+        'org_manager'         => 403,
+        'org_user'            => 404,
+        'space_manager'       => 403,
+        'space_auditor'       => 403,
+        'org_auditor'         => 404,
         'org_billing_manager' => 404,
-        'admin' => 200,
-        'admin_read_only' => 200
+        'admin'               => 200,
+        'admin_read_only'     => 200
       }.freeze
 
       role_to_expected_http_response.each do |role, expected_return_value|
@@ -1324,6 +1347,7 @@ RSpec.describe AppsV3Controller, type: :controller do
         expect(response.status).to eq(200)
         expect(parsed_body).to eq({
           'links' => expected_success_response['links'],
+          'var'   => {},
         })
       end
     end
@@ -1337,20 +1361,24 @@ RSpec.describe AppsV3Controller, type: :controller do
 
     let(:expected_success_response) do
       {
-        'override' => 'new-value',
-        'preserve' => 'value-to-keep',
-        'new-key' => 'another-new-value',
+        'var' => {
+          'override' => 'new-value',
+          'preserve' => 'value-to-keep',
+          'new-key'  => 'another-new-value'
+        },
         'links' => {
           'self' => { 'href' => "#{link_prefix}/v3/apps/#{app_model.guid}/environment_variables" },
-          'app' => { 'href' => "#{link_prefix}/v3/apps/#{app_model.guid}" }
+          'app'  => { 'href' => "#{link_prefix}/v3/apps/#{app_model.guid}" }
         }
       }
     end
 
     let(:request_body) do
       {
-        'override' => 'new-value',
-        'new-key' => 'another-new-value',
+        'var' => {
+          'override' => 'new-value',
+          'new-key'  => 'another-new-value'
+        }
       }
     end
 
@@ -1360,15 +1388,15 @@ RSpec.describe AppsV3Controller, type: :controller do
 
     describe 'permissions by role' do
       role_to_expected_http_response = {
-        'space_developer' => 200,
-        'org_manager' => 403,
-        'org_user' => 404,
-        'space_manager' => 403,
-        'space_auditor' => 403,
-        'org_auditor' => 404,
+        'space_developer'     => 200,
+        'org_manager'         => 403,
+        'org_user'            => 404,
+        'space_manager'       => 403,
+        'space_auditor'       => 403,
+        'org_auditor'         => 404,
         'org_billing_manager' => 404,
-        'admin' => 200,
-        'admin_read_only' => 403
+        'admin'               => 200,
+        'admin_read_only'     => 403
       }.freeze
 
       role_to_expected_http_response.each do |role, expected_return_value|
@@ -1386,7 +1414,7 @@ RSpec.describe AppsV3Controller, type: :controller do
               expect(app_model.environment_variables).to eq({
                 'override' => 'new-value',
                 'preserve' => 'value-to-keep',
-                'new-key' => 'another-new-value',
+                'new-key'  => 'another-new-value',
               })
             end
           end
@@ -1410,7 +1438,9 @@ RSpec.describe AppsV3Controller, type: :controller do
     context 'when given an invalid request' do
       let(:request_body) do
         {
-          'PORT' => 8080,
+          'var' => {
+            'PORT' => 8080
+          }
         }
       end
 
@@ -1442,7 +1472,7 @@ RSpec.describe AppsV3Controller, type: :controller do
       set_current_user(user)
       allow_user_read_access_for(user, spaces: [space])
       allow_user_write_access(user, space: space)
-      VCAP::CloudController::BuildpackLifecycleDataModel.make(app: app_model, buildpack: nil, stack: VCAP::CloudController::Stack.default.name)
+      VCAP::CloudController::BuildpackLifecycleDataModel.make(app: app_model, buildpacks: nil, stack: VCAP::CloudController::Stack.default.name)
     end
 
     it 'returns 200 and the droplet guid' do
@@ -1757,6 +1787,117 @@ RSpec.describe AppsV3Controller, type: :controller do
           get :current_droplet_relationship, guid: app_model.guid
 
           expect(response.status).to eq(200)
+        end
+      end
+    end
+  end
+
+  describe '#feature/' do
+    let(:app_model) { VCAP::CloudController::AppModel.make(enable_ssh: true) }
+    let(:space) { app_model.space }
+    let(:org) { space.organization }
+    let(:user) { VCAP::CloudController::User.make }
+    let(:ssh_enabled) { { 'name' => 'ssh', 'description' => 'Enable SSHing into the app.', 'enabled' => true } }
+    let(:ssh_disabled) { { 'name' => 'ssh', 'description' => 'Enable SSHing into the app.', 'enabled' => false } }
+    role_to_expected_http_response = {
+      'admin'               => 200,
+      'admin_read_only'     => 200,
+      'global_auditor'      => 200,
+      'space_developer'     => 200,
+      'space_manager'       => 200,
+      'space_auditor'       => 200,
+      'org_manager'         => 200,
+      'org_auditor'         => 404,
+      'org_billing_manager' => 404,
+    }.freeze
+
+    describe '#feature/ssh' do
+      role_to_expected_http_response.each do |role, expected_return_value|
+        context "as an #{role}" do
+          it "returns #{expected_return_value} for features/ssh" do
+            set_current_user_as_role(role: role, org: org, space: space, user: user)
+
+            get :feature, guid: app_model.guid, name: 'ssh'
+
+            expect(response.status).to eq(expected_return_value), "role #{role}: expected  #{expected_return_value}, got: #{response.status}"
+            if expected_return_value == 200
+              expect(parsed_body).to eq(ssh_enabled), "failed to match parsed_body for role #{role}: got #{parsed_body}"
+            end
+          end
+        end
+      end
+
+      context 'enable_ssh is false' do
+        let(:app_model) { VCAP::CloudController::AppModel.make(enable_ssh: false) }
+
+        it 'returns enabled false' do
+          set_current_user_as_role(role: 'admin', org: nil, space: nil, user: user)
+          get :feature, guid: app_model.guid, name: 'ssh'
+          expect(parsed_body).to eq(ssh_disabled)
+        end
+      end
+    end
+
+    describe '#feature/404' do
+      it 'throws 404 for a non-existent feature' do
+        set_current_user_as_role(role: 'admin', org: org, space: space, user: user)
+
+        get :feature, guid: app_model.guid, name: 'i-dont-exist'
+
+        expect(response.status).to eq(404)
+      end
+    end
+  end
+
+  describe '#features' do
+    let(:app_model) { VCAP::CloudController::AppModel.make(enable_ssh: true) }
+    let(:space) { app_model.space }
+    let(:org) { space.organization }
+    let(:user) { VCAP::CloudController::User.make }
+    let(:ssh_enabled) { { 'name' => 'ssh', 'description' => 'Enable SSHing into the app.', 'enabled' => true } }
+    let(:ssh_disabled) { { 'name' => 'ssh', 'description' => 'Enable SSHing into the app.', 'enabled' => false } }
+
+    describe 'permissions by role' do
+      role_to_expected_http_response = {
+        'admin'               => 200,
+        'admin_read_only'     => 200,
+        'global_auditor'      => 200,
+        'space_developer'     => 200,
+        'space_manager'       => 200,
+        'space_auditor'       => 200,
+        'org_manager'         => 200,
+        'org_auditor'         => 404,
+        'org_billing_manager' => 404,
+      }.freeze
+
+      role_to_expected_http_response.each do |role, expected_return_value|
+        context "as an #{role}" do
+          it "returns #{expected_return_value} for list-features" do
+            set_current_user_as_role(role: role, org: org, space: space, user: user)
+
+            get :features, guid: app_model.guid
+
+            expect(response.status).to eq(expected_return_value), "role #{role}: expected  #{expected_return_value}, got: #{response.status}"
+            if expected_return_value == 200
+              expect(parsed_body).to eq(
+                'resources'  => [ssh_enabled],
+                'pagination' => {}
+              ), "failed to match parsed_body for role #{role}: got #{parsed_body}"
+            end
+          end
+        end
+      end
+
+      context 'enable_ssh is false' do
+        let(:app_model) { VCAP::CloudController::AppModel.make(enable_ssh: false) }
+
+        it 'returns enabled false' do
+          set_current_user_as_role(role: 'admin', org: nil, space: nil, user: user)
+          get :features, guid: app_model.guid
+          expect(parsed_body).to eq(
+            'resources'  => [ssh_disabled],
+            'pagination' => {}
+          )
         end
       end
     end

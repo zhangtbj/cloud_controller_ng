@@ -6,6 +6,7 @@ module VCAP::CloudController
       @app_event_repository   = app_event_repository
       @route_event_repository = route_event_repository
       @user_audit_info        = user_audit_info
+      @logger = Steno.logger('cc.action.route_delete')
     end
 
     def delete_sync(route:, recursive:)
@@ -18,14 +19,17 @@ module VCAP::CloudController
       Jobs::Enqueuer.new(deletion_job, queue: 'cc-generic').enqueue
     end
 
-    def atomic_delete(route:)
-      delete_count = Route.where(guid: route.guid).
-                     exclude(guid: RouteMappingModel.where(route_guid: route.guid).select(:route_guid)).
-                     exclude(id: RouteBinding.where(route_id: route.id).select(:route_id)).
+    def delete_unmapped_route(route:)
+      delete_count = Route.where(id: route.id).
+                     exclude(guid: RouteMappingModel.select(:route_guid)).
+                     exclude(id: RouteBinding.select(:route_id)).
                      delete
+
       if delete_count > 0
         route_event_repository.record_route_delete_request(route, user_audit_info, false)
       end
+    rescue Sequel::ForeignKeyConstraintViolation => e
+      @logger.info("Tried to delete route '#{route.guid}', got error: #{e}")
     end
 
     private

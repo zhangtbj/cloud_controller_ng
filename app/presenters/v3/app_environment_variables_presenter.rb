@@ -10,12 +10,13 @@ module VCAP::CloudController
 
         def to_hash
           result = {
+            var: {},
             links: build_links
           }
 
           if !app.environment_variables.nil?
             app.environment_variables.each do |key, value|
-              result[key.to_sym] = value
+              result[:var][key.to_sym] = value
             end
           end
 
@@ -28,8 +29,8 @@ module VCAP::CloudController
           url_builder = VCAP::CloudController::Presenters::ApiUrlBuilder.new
 
           {
-            self:                  { href: url_builder.build_url(path: "/v3/apps/#{app.guid}/environment_variables") },
-            app: { href: url_builder.build_url(path: "/v3/apps/#{app.guid}") }
+            self: { href: url_builder.build_url(path: "/v3/apps/#{app.guid}/environment_variables") },
+            app:  { href: url_builder.build_url(path: "/v3/apps/#{app.guid}") }
           }
         end
       end

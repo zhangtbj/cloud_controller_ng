@@ -4,6 +4,12 @@ module VCAP::CloudController
   module Presenters
     module V3
       class PackagePresenter < BasePresenter
+        REDACTED_MESSAGE = '***'.freeze
+
+        def initialize(resource, show_secrets: false, censored_message: REDACTED_MESSAGE)
+          super
+        end
+
         def to_hash
           {
             guid:       package.guid,
@@ -29,6 +35,8 @@ module VCAP::CloudController
         def docker_data
           {
             image: package.image,
+            username: package.docker_username,
+            password: package.docker_username && REDACTED_MESSAGE,
           }
         end
 
@@ -53,7 +61,6 @@ module VCAP::CloudController
             self:     { href: url_builder.build_url(path: "/v3/packages/#{package.guid}") },
             upload:   upload_link,
             download: download_link,
-            stage:    { href: url_builder.build_url(path: "/v3/packages/#{package.guid}/droplets"), method: 'POST' },
             app:      { href: url_builder.build_url(path: "/v3/apps/#{package.app_guid}") },
           }
 

@@ -58,7 +58,7 @@ module VCAP::CloudController
       end
 
       def space_or_org_visible_for_user(space, user)
-        organization_visible(space.organization).union space_visible(space, user)
+        organization_visible(space.organization).union(space_visible(space, user), alias: :services)
       end
 
       def organization_visible(organization)
@@ -71,12 +71,16 @@ module VCAP::CloudController
       private
 
       def space_visible(space, user)
-        if space.has_member? user
+        if space.has_member?(user) || can_read_globally?(user)
           private_brokers_for_space = ServiceBroker.filter(space_id: space.id)
           dataset.filter(service_broker: private_brokers_for_space)
         else
           dataset.filter(id: nil)
         end
+      end
+
+      def can_read_globally?(user)
+        VCAP::CloudController::Permissions.new(user).can_read_globally?
       end
     end
 

@@ -5,6 +5,10 @@ The Cloud Foundry V3 API is secured using OAuth 2. Clients are expected to prese
 
 Tokens can be obtained from the Cloud Foundry UAA server. For more information, see the [UAA API Documentation](http://docs.cloudfoundry.org/api/uaa/index.html)
 
+<aside class="notice">
+Use the cf cli to obtain a bearer token: cf oauth-token
+</aside>
+
 ## Authorization
 
 Access to resources is determined by combining scopes in the OAuth2 Token with User Roles that are managed by the API. User Roles are currently managed by the [V2 API](http://apidocs.cloudfoundry.org/).
@@ -53,11 +57,13 @@ HTTP Status Code | Description
 500 Internal Server Error	| An unexpected error occurred.
 502 Bad Gateway |	An upstream service caused the request to fail.
 
-## Resources
+## API Resource
 
 A resource represents an individual object within the system, such as an app or a service. It is represented as a JSON object.
 
 A resource consists of several required resource fields and other attributes specific to the resource.
+
+See [Resources](#resources) and [Experimental Resources](#experimental-resources) for specific resources.
 
 ### Required fields
 ```
@@ -89,7 +95,7 @@ Name | Type | Description
 
 ### Links
 
-Links provide URLs to relationships and actions for a resource. Links are represented as a JSON object and will always contain at least a `self` link.
+Links provide URLs to [relationships](#relationships) and actions for a resource. Links are represented as a JSON object and will always contain at least a `self` link.
 
 Each link is keyed by its type and will include a `href` for the URL and an optional `method` for links that cannot be followed using `GET`.
 
@@ -102,8 +108,7 @@ Name | Type | Description
 
 ## Relationships
 
-Relationships allow users to create, read, update, and delete associations between resources. Relationships are managed
-through a relationship sub resource.
+Relationships represent associations between resources. Relationships can be used to create, read, update, and delete associations through the relationship sub resource.
 
 Not all resources implement every relationship operation listed below. See the docs for each resource to see how it interacts with its relationships.
 
@@ -356,7 +361,7 @@ Name | Type | Description
 
 ## Lifecycles
 
-Lifecycles inform the platform of how to build droplets and run apps. For example the the
+Lifecycles inform the platform of how to build droplets and run apps. For example the
 `buildpack` lifecycle will use a droplet and a rootfs to run the app, while a `docker` lifecycle will
 pull a docker image from a registry to run an app.
 
@@ -378,7 +383,7 @@ will be created and the droplet will be expanded inside that container to be exe
 Name | Type | Description
 ---- | ---- | -----------
 **type** | _string_ | `buildpack`
-**data.buildpacks** | _array of strings_ | A list of the names of buildpacks, URLs from which they may be downloaded, or null to auto-detect a suitable buildpack. Supports at most one buildpack.
+**data.buildpacks** | _array of strings_ | A list of the names of buildpacks, URLs from which they may be downloaded, or null to auto-detect a suitable buildpack.
 **data.stack** | _string_ | The root filesystem to use with the buildpack, for example `cflinuxfs2`
 
 ### Docker lifecycle
@@ -393,3 +398,36 @@ Name | Type | Description
 ---- | ---- | -----------
 **type** | _string_ | `docker`
 **data** | _object_ | Data is not used by the docker lifecycle. Valid value is `{}`.
+
+## Procfiles
+
+```
+Example Ruby Procfile
+```
+
+```yaml
+web: bundle exec rackup config.ru -p $PORT
+rake: bundle exec rake
+worker: bundle exec rake workers:start
+```
+
+A Procfile enables you to declare required runtime processes, called process types, for your app.
+Procfiles must be named `Procfile` exactly, and placed in the root directory of your application.
+
+In a Procfile, you declare one process type per line and use the syntax `PROCESS_TYPE: COMMAND`.
+
+- `PROCESS_TYPE` defines the type of the process.
+- `COMMAND` is the command line to launch the process.
+
+#### Procfile use cases
+Many buildpacks provide their own process types and commands by default; however, there are special cases where specifying a custom `COMMAND` is necessary.
+Commands can be overwritten by providing a Procfile with the same process type.
+
+For example, a buildpack may provide a `worker` process type that runs the `rake default:start` command.
+If a Procfile is provided that also contains a `worker` process type, but a different command such as `rake custom:start`, the `rake custom:start` command will be used.
+
+Some buildpacks, such as Python, that work on a variety of frameworks, do not attempt to provide a default start command. For these cases, a Procfile should be used to specify any necessary commands for the app.
+
+#### Web process
+`web` is a [special process type](#web-process-type) that is required for all applications.
+The `web` `PROCESS_TYPE` must be specified by either the buildpack or the Procfile.

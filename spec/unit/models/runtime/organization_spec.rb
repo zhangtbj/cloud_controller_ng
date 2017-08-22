@@ -1,4 +1,5 @@
 # encoding: utf-8
+
 require 'spec_helper'
 
 require 'isolation_segment_assign'
@@ -26,16 +27,16 @@ module VCAP::CloudController
       end
 
       it 'has associated apps' do
-        app = App.make
-        organization = app.space.organization
-        expect(organization.apps).to include(app.reload)
+        process = ProcessModel.make
+        organization = process.space.organization
+        expect(organization.apps).to include(process.reload)
       end
 
       it 'does not associate non-web v2 apps' do
         app_model = AppModel.make
         org = app_model.space.organization
-        app1 = App.make(type: 'web', app: app_model)
-        App.make(type: 'other', app: app_model)
+        app1 = ProcessModel.make(type: 'web', app: app_model)
+        ProcessModel.make(type: 'other', app: app_model)
         expect(org.apps).to match_array([app1])
       end
 
@@ -433,7 +434,7 @@ module VCAP::CloudController
       it 'should return the memory available when no processes are running' do
         org = Organization.make(quota_definition: quota)
         space = Space.make(organization: org)
-        AppFactory.make(space: space, memory: 200, instances: 2)
+        ProcessModelFactory.make(space: space, memory: 200, instances: 2)
 
         expect(org.has_remaining_memory(500)).to eq(true)
         expect(org.has_remaining_memory(501)).to eq(false)
@@ -443,8 +444,8 @@ module VCAP::CloudController
         org = Organization.make(quota_definition: quota)
         space = Space.make(organization: org)
 
-        AppFactory.make(space: space, memory: 200, instances: 2, state: 'STARTED', type: 'worker')
-        AppFactory.make(space: space, memory: 50, instances: 1, state: 'STARTED')
+        ProcessModelFactory.make(space: space, memory: 200, instances: 2, state: 'STARTED', type: 'worker')
+        ProcessModelFactory.make(space: space, memory: 50, instances: 1, state: 'STARTED')
 
         expect(org.has_remaining_memory(50)).to eq(true)
         expect(org.has_remaining_memory(51)).to eq(false)
@@ -454,9 +455,9 @@ module VCAP::CloudController
         org = Organization.make(quota_definition: quota)
         space = Space.make(organization: org)
 
-        app = AppFactory.make(space: space, memory: 250, instances: 1, state: 'STARTED', type: 'worker')
-        TaskModel.make(app: app.app, memory_in_mb: 25, state: TaskModel::RUNNING_STATE)
-        TaskModel.make(app: app.app, memory_in_mb: 25, state: TaskModel::RUNNING_STATE)
+        process = ProcessModelFactory.make(space: space, memory: 250, instances: 1, state: 'STARTED', type: 'worker')
+        TaskModel.make(app: process.app, memory_in_mb: 25, state: TaskModel::RUNNING_STATE)
+        TaskModel.make(app: process.app, memory_in_mb: 25, state: TaskModel::RUNNING_STATE)
 
         expect(org.has_remaining_memory(200)).to eq(true)
         expect(org.has_remaining_memory(201)).to eq(false)
@@ -466,9 +467,9 @@ module VCAP::CloudController
         org = Organization.make(quota_definition: quota)
         space = Space.make(organization: org)
 
-        app = AppFactory.make(space: space, memory: 250, instances: 1, state: 'STARTED', type: 'worker')
-        TaskModel.make(app: app.app, memory_in_mb: 25, state: TaskModel::PENDING_STATE)
-        TaskModel.make(app: app.app, memory_in_mb: 25, state: TaskModel::SUCCEEDED_STATE)
+        process = ProcessModelFactory.make(space: space, memory: 250, instances: 1, state: 'STARTED', type: 'worker')
+        TaskModel.make(app: process.app, memory_in_mb: 25, state: TaskModel::PENDING_STATE)
+        TaskModel.make(app: process.app, memory_in_mb: 25, state: TaskModel::SUCCEEDED_STATE)
 
         expect(org.has_remaining_memory(250)).to eq(true)
         expect(org.has_remaining_memory(251)).to eq(false)

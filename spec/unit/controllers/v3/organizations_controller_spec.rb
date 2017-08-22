@@ -1,6 +1,159 @@
 require 'rails_helper'
 
 RSpec.describe OrganizationsV3Controller, type: :controller do
+  describe '#show' do
+    let(:user) { set_current_user(VCAP::CloudController::User.make) }
+
+    let!(:org) { VCAP::CloudController::Organization.make(name: 'Eric\'s Farm') }
+    let!(:space) { VCAP::CloudController::Space.make(name: 'Cat', organization: org) }
+
+    describe 'permissions by role' do
+      before do
+        set_current_user(user)
+      end
+
+      role_to_expected_http_response = {
+        'admin'               => 200,
+        'space_developer'     => 200,
+        'admin_read_only'     => 200,
+        'global_auditor'      => 200,
+        'space_manager'       => 200,
+        'space_auditor'       => 200,
+        'org_manager'         => 200,
+        'org_auditor'         => 200,
+        'org_billing_manager' => 200,
+      }.freeze
+
+      role_to_expected_http_response.each do |role, expected_return_value|
+        context "as an #{role}" do
+          it "returns #{expected_return_value}" do
+            set_current_user_as_role(role: role, org: org, space: space, user: user)
+
+            get :show, guid: org.guid
+
+            expect(response.status).to eq(expected_return_value),
+              "Expected #{expected_return_value}, but got #{response.status}. Response: #{response.body}"
+            if expected_return_value == 200
+              expect(parsed_body['guid']).to eq(org.guid)
+              expect(parsed_body['name']).to eq('Eric\'s Farm')
+              expect(parsed_body['created_at']).to match(iso8601)
+              expect(parsed_body['updated_at']).to match(iso8601)
+              expect(parsed_body['links']['self']['href']).to match(%r{/v3/organizations/#{org.guid}$})
+            end
+          end
+        end
+      end
+    end
+
+    describe 'user with no roles' do
+      before do
+        set_current_user(user)
+      end
+
+      it 'returns an error' do
+        get :show, guid: org.guid
+        expect(response.status).to eq(404), "Got #{response.status}"
+      end
+    end
+  end
+
+  describe '#create' do
+    let(:user) { VCAP::CloudController::User.make }
+
+    before do
+      set_current_user(user)
+    end
+
+    describe 'permissions by role' do
+      role_to_expected_http_response = {
+        'admin'           => 201,
+        'admin_read_only' => 403,
+        'global_auditor'  => 403,
+      }.freeze
+
+      role_to_expected_http_response.each do |role, expected_return_value|
+        context "as an #{role}" do
+          it "returns #{expected_return_value}" do
+            set_current_user_as_role(role: role, user: user)
+
+            post :create, body: { name: 'my-sweet-org' }
+
+            expect(response.status).to eq(expected_return_value),
+              "Expected #{expected_return_value}, but got #{response.status}. Response: #{response.body}"
+            if expected_return_value == 200
+              expect(parsed_body['guid']).to eq(org.guid)
+              expect(parsed_body['name']).to eq('Eric\'s Farm')
+              expect(parsed_body['created_at']).to match(iso8601)
+              expect(parsed_body['updated_at']).to match(iso8601)
+              expect(parsed_body['links']['self']['href']).to match(%r{/v3/organizations/#{org.guid}$})
+            end
+          end
+        end
+      end
+    end
+
+    describe 'user with no roles' do
+      it 'returns an error' do
+        post :create, body: { name: 'bloop' }
+        expect(response.status).to eq(403), "Got #{response.status}"
+      end
+    end
+
+    context 'when "user_org_creation" feature flag is enabled' do
+      before do
+        VCAP::CloudController::FeatureFlag.make(name: 'user_org_creation', enabled: true)
+      end
+
+      it 'lets ALL users create orgs' do
+        post :create, body: { name: 'anarchy-reigns' }
+        expect(response.status).to eq(201), "Got #{response.status}"
+      end
+    end
+
+    context 'when the user is admin' do
+      before do
+        set_current_user_as_admin(user: user)
+      end
+
+      context 'when the org name is missing' do
+        it 'displays an informative error' do
+          post :create, body: { name: '' }
+          expect(response.status).to eq(422)
+          expect(parsed_body['errors'][0]['detail']).to include("Name can't be blank")
+        end
+      end
+
+      context 'when the org name is NOT unique' do
+        let(:name) { 'Olsen' }
+
+        before do
+          VCAP::CloudController::Organization.make(name: name)
+        end
+
+        it 'displays an informative error' do
+          post :create, body: { name: name }
+          expect(response.status).to eq(422)
+          expect(parsed_body['errors'][0]['detail']).to eq('Name must be unique')
+        end
+      end
+
+      context 'when there is another validation exception' do
+        before do
+          errors = Sequel::Model::Errors.new
+          errors.add(:blork, 'is busted')
+          expect(VCAP::CloudController::Organization).to receive(:create).
+            and_raise(Sequel::ValidationFailed.new(errors))
+        end
+
+        it 'responds with 422' do
+          post :create, body: { name: 'George' }
+          expect(response.status).to eq(422)
+          expect(parsed_body['errors'][0]['detail']).to eq('blork is busted')
+        end
+      end
+    end
+  end
+
   describe '#index' do
     let(:user) { set_current_user(VCAP::CloudController::User.make) }
 
@@ -34,6 +187,20 @@ RSpec.describe OrganizationsV3Controller, type: :controller do
           expect(response.status).to eq(200)
           expect(parsed_body['resources'].map { |r| r['name'] }).to match_array([
             'Marmot', 'Beaver'
+          ])
+        end
+      end
+
+      describe 'order_by' do
+        it 'returns orgs sorted alphabetically by name' do
+          get :index, order_by: 'name'
+
+          expect(response.status).to eq(200)
+          expect(parsed_body['resources'].map { |r| r['name'] }).to eql([
+            'Beaver',
+            'Capybara',
+            'Marmot',
+            'Rat',
           ])
         end
       end
@@ -129,7 +296,7 @@ RSpec.describe OrganizationsV3Controller, type: :controller do
           get :index, params
 
           parsed_response = parsed_body
-          response_guids = parsed_response['resources'].map { |r| r['guid'] }
+          response_guids  = parsed_response['resources'].map { |r| r['guid'] }
           expect(parsed_response['pagination']['total_results']).to eq(2)
           expect(response_guids.length).to eq(per_page)
         end
@@ -184,45 +351,64 @@ RSpec.describe OrganizationsV3Controller, type: :controller do
     let(:unassigner) { VCAP::CloudController::IsolationSegmentUnassign.new }
 
     before do
-      set_current_user(user, { admin: true })
-      allow_user_read_access_for(user, orgs: [org])
       assigner.assign(isolation_segment, [org])
       org.update(default_isolation_segment_guid: isolation_segment.guid)
     end
 
-    it 'presents the default isolation segment' do
-      get :show_default_isolation_segment, guid: org.guid
-
-      expect(response.status).to eq(200)
-      expect(parsed_body['data']['guid']).to eq(isolation_segment.guid)
-    end
-
-    context 'when the organization does not exist' do
-      it 'throws ResourceNotFound error' do
-        get :show_default_isolation_segment, guid: 'cest-ne-pas-un-org'
-
-        expect(response.status).to eq(404)
-        expect(response.body).to include 'ResourceNotFound'
-        expect(response.body).to include 'Organization not found'
-      end
-    end
-
-    context 'when there is no default isolation segment' do
+    context 'with sufficient permissions' do
       before do
-        org.update(default_isolation_segment_guid: nil)
+        set_current_user(user, { admin: true })
+        allow_user_read_access_for(user, orgs: [org])
       end
 
-      it 'presents a null guid' do
+      it 'presents the default isolation segment' do
         get :show_default_isolation_segment, guid: org.guid
 
         expect(response.status).to eq(200)
-        expect(parsed_body['data']).to eq(nil)
+        expect(parsed_body['data']['guid']).to eq(isolation_segment.guid)
+      end
+
+      context 'when the organization does not exist' do
+        it 'throws ResourceNotFound error' do
+          get :show_default_isolation_segment, guid: 'cest-ne-pas-un-org'
+
+          expect(response.status).to eq(404)
+          expect(response.body).to include 'ResourceNotFound'
+          expect(response.body).to include 'Organization not found'
+        end
+      end
+
+      context 'when there is no default isolation segment' do
+        before do
+          org.update(default_isolation_segment_guid: nil)
+        end
+
+        it 'presents a null guid' do
+          get :show_default_isolation_segment, guid: org.guid
+
+          expect(response.status).to eq(200)
+          expect(parsed_body['data']).to eq(nil)
+        end
       end
     end
 
     context 'permissions' do
+      context 'when the user does not have cloud_controller.read' do
+        before do
+          set_current_user(user, scopes: ['cloud_controller.write'])
+        end
+
+        it 'throws a NotAuthorized error' do
+          get :show_default_isolation_segment, guid: org.guid
+
+          expect(response.status).to eq(403)
+          expect(response.body).to include 'NotAuthorized'
+        end
+      end
+
       context 'when the user does not have permissions to read from organization' do
         before do
+          set_current_user(user)
           allow_user_read_access_for(user)
         end
 

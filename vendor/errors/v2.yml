@@ -168,26 +168,6 @@
   http_code: 404
   message: "The app space could not be found: %s"
 
-50001:
-  name: ServiceAuthTokenInvalid
-  http_code: 400
-  message: "The service auth token is invalid: %s"
-
-50002:
-  name: ServiceAuthTokenLabelTaken
-  http_code: 400
-  message: "The service auth token label is taken: %s"
-
-50003:
-  name: ServiceAuthTokenNotFound
-  http_code: 404
-  message: "The service auth token could not be found: %s"
-
-50004:
-  name: MissingServiceAuthToken
-  http_code: 500
-  message: "Missing service auth token: %s"
-
 60001:
   name: ServiceInstanceNameEmpty
   http_code: 400
@@ -533,6 +513,11 @@
   http_code: 500
   message: "Failed to perform blobstore operation after three retries."
 
+150008:
+  name: DockerImageMissing
+  http_code: 400
+  message: "Docker credentials can only be supplied for apps with a 'docker_image'"
+
 160001:
   name: AppBitsUploadInvalid
   http_code: 400
@@ -608,6 +593,11 @@
   http_code: 500
   message: "Stager error: %s"
 
+170014:
+  name: RunnerInvalidRequest
+  http_code: 500
+  message: "Runner invalid request: %s"
+
 170015:
   name: RunnerUnavailable
   http_code: 503
@@ -621,7 +611,7 @@
 170017:
   name: StagingInProgress
   http_code: 422
-  message: "Only one package can be staged at a time per application."
+  message: "Only one build can be STAGING at a time per application."
 
 170018:
   name: InvalidTaskAddress
@@ -732,11 +722,6 @@
   name: InstancesUnavailable
   http_code: 503
   message: "Instances information unavailable: %s"
-
-230001:
-  name: BillingEventQueryInvalid
-  http_code: 400
-  message: "Billing event query start_date and/or end_date are missing or invalid"
 
 230002:
   name: EventNotFound
@@ -1022,6 +1007,11 @@
   name: UserProvidedServiceInstanceNotFound
   http_code: 404
   message: "The service instance could not be found: %s"
+
+340002:
+  name: UserProvidedServiceInstanceHandlerNeeded
+  http_code: 400
+  message: "Please use the User Provided Services API to manage this resource."
 
 350001:
   name: ProcessInvalid

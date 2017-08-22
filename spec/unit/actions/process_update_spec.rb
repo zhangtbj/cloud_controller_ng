@@ -11,9 +11,9 @@ module VCAP::CloudController
         data: { timeout: 20 }
       }
     end
-    let(:message) { ProcessUpdateMessage.new({ command: 'new', health_check: health_check, ports: [1234, 5678] }) }
+    let(:message) { ProcessUpdateMessage.new({ command: 'new', health_check: health_check }) }
     let!(:process) do
-      App.make(
+      ProcessModel.make(
         :process,
         command:              'initial command',
         health_check_type:    'port',
@@ -33,7 +33,52 @@ module VCAP::CloudController
         expect(process.command).to eq('new')
         expect(process.health_check_type).to eq('process')
         expect(process.health_check_timeout).to eq(20)
-        expect(process.ports).to match_array([1234, 5678])
+      end
+
+      context 'when the new healthcheck is http' do
+        let(:health_check) do
+          {
+            type: 'http',
+            data: { endpoint: '/healthcheck' }
+          }
+        end
+
+        it 'updates the requested changes on the process' do
+          process_update.update(process, message)
+
+          process.reload
+          expect(process.command).to eq('new')
+          expect(process.health_check_type).to eq('http')
+          expect(process.health_check_http_endpoint).to eq('/healthcheck')
+        end
+      end
+
+      context 'when the old healthcheck is http and the new healtcheck is not' do
+        let!(:process) do
+          ProcessModel.make(
+            :process,
+            command:              'initial command',
+            health_check_type:    'http',
+            health_check_http_endpoint: '/healthcheck',
+            health_check_timeout: 10,
+            ports:                [1574, 3389]
+          )
+        end
+
+        let(:health_check) do
+          {
+            type: 'port',
+          }
+        end
+
+        it 'clears the HTTP endpoint field' do
+          process_update.update(process, message)
+
+          process.reload
+          expect(process.command).to eq('new')
+          expect(process.health_check_type).to eq('port')
+          expect(process.health_check_http_endpoint).to be_nil
+        end
       end
 
       context 'when no changes are requested' do
@@ -72,7 +117,6 @@ module VCAP::CloudController
           user_audit_info,
           {
             'command'      => 'new',
-            'ports'        => [1234, 5678],
             'health_check' => {
               type: 'process',
               data: { timeout: 20 }

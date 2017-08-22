@@ -6,6 +6,8 @@ module VCAP::CloudController
     module V3
       class ProcessPresenter < BasePresenter
         def to_hash
+          health_check_data = { timeout: process.health_check_timeout }
+          health_check_data[:endpoint] = process.health_check_http_endpoint if process.health_check_type == 'http'
           {
             guid:         process.guid,
             type:         process.type,
@@ -13,12 +15,9 @@ module VCAP::CloudController
             instances:    process.instances,
             memory_in_mb: process.memory,
             disk_in_mb:   process.disk_quota,
-            ports:        VCAP::CloudController::Diego::Protocol::OpenProcessPorts.new(process).to_a,
             health_check: {
               type: process.health_check_type,
-              data: {
-                timeout: process.health_check_timeout
-              }
+              data: health_check_data
             },
             created_at:   process.created_at,
             updated_at:   process.updated_at,
@@ -36,9 +35,9 @@ module VCAP::CloudController
           url_builder = VCAP::CloudController::Presenters::ApiUrlBuilder.new
           {
             self:  { href: url_builder.build_url(path: "/v3/processes/#{process.guid}") },
-            scale: { href: url_builder.build_url(path: "/v3/processes/#{process.guid}/scale"), method: 'PUT', },
+            scale: { href: url_builder.build_url(path: "/v3/processes/#{process.guid}/actions/scale"), method: 'POST', },
             app:   { href: url_builder.build_url(path: "/v3/apps/#{process.app_guid}") },
-            space: { href: url_builder.build_url(path: "/v2/spaces/#{process.space_guid}") },
+            space: { href: url_builder.build_url(path: "/v3/spaces/#{process.space_guid}") },
             stats: { href: url_builder.build_url(path: "/v3/processes/#{process.guid}/stats") }
           }
         end

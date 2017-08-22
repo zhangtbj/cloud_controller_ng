@@ -10,14 +10,17 @@ module VCAP::CloudController
       class BBSFetchError < Error
       end
 
-      def initialize(config)
+      def initialize(config:, statsd_updater: VCAP::CloudController::Metrics::StatsdUpdater.new)
         @config   = config
         @workpool = WorkPool.new(50)
+        @statsd_updater = statsd_updater
       end
 
       def sync
         logger.info('run-process-sync')
-        diego_lrps = bbs_apps_client.fetch_scheduling_infos.index_by { |d| d.desired_lrp_key.process_guid }
+        bump_freshness = true
+        diego_lrps     = bbs_apps_client.fetch_scheduling_infos.index_by { |d| d.desired_lrp_key.process_guid }
+        logger.info('fetched-scheduling-infos')
 
         for_processes do |processes|
           processes.each do |process|
@@ -49,16 +52,46 @@ module VCAP::CloudController
 
         @workpool.drain
 
-        bbs_apps_client.bump_freshness
-        logger.info('finished-process-sync')
+        process_exceptions(@workpool.exceptions)
       rescue CloudController::Errors::ApiError => e
-        logger.info('sync-failed', error: e.message)
+        logger.info('sync-failed', error: e.name, error_message: e.message)
+        bump_freshness = false
         raise BBSFetchError.new(e.message)
+      rescue => e
+        logger.info('sync-failed', error: e.class.name, error_message: e.message)
+        bump_freshness = false
+        raise
+      ensure
+        if bump_freshness
+          bbs_apps_client.bump_freshness
+          logger.info('finished-process-sync')
+        end
       end
 
       private
 
       attr_reader :config
+
+      def process_exceptions(exceptions)
+        first_exception = nil
+        invalid_lrps = 0
+        exceptions.each do |e|
+          error_name = e.is_a?(CloudController::Errors::ApiError) ? e.name : e.class.name
+          if error_name == 'RunnerInvalidRequest'
+            logger.info('synced-invalid-desired-lrps', error: error_name, error_message: e.message)
+            invalid_lrps += 1
+          elsif error_name == 'RunnerError' && e.message['the requested resource already exists']
+            logger.info('ignore-existing-resource', error: error_name, error_message: e.message)
+          elsif error_name == 'RunnerError' && e.message['the requested resource could not be found']
+            logger.info('ignore-deleted-resource', error: error_name, error_message: e.message)
+          else
+            logger.error('error-updating-lrp-state', error: error_name, error_message: e.message)
+            first_exception ||= e
+          end
+        end
+        @statsd_updater.update_synced_invalid_lrps(invalid_lrps)
+        raise first_exception if first_exception
+      end
 
       def for_processes
         last_id = 0

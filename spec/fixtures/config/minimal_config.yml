@@ -21,9 +21,6 @@ app_domains:
   - name: customer-app-domain2.com
     router_group_name: default-tcp
 
-app_events:
-  cutoff_age_in_days: 31
-
 app_usage_events:
   cutoff_age_in_days: 31
 
@@ -121,6 +118,9 @@ db_encryption_key: some-key
 
 loggregator:
   router: "127.0.0.1:8080"
+
+doppler:
+  url: 'wss://doppler.the-system-domain.com:443'
 
 renderer:
   max_results_per_page: 100

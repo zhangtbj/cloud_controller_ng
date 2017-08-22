@@ -5,15 +5,16 @@ Rails.application.routes.draw do
   get '/apps', to: 'apps_v3#index'
   post '/apps', to: 'apps_v3#create'
   get '/apps/:guid', to: 'apps_v3#show'
-  put '/apps/:guid', to: 'apps_v3#update'
   patch '/apps/:guid', to: 'apps_v3#update'
   delete '/apps/:guid', to: 'apps_v3#destroy'
-  put '/apps/:guid/start', to: 'apps_v3#start'
-  put '/apps/:guid/stop', to: 'apps_v3#stop'
+  post '/apps/:guid/actions/start', to: 'apps_v3#start'
+  post '/apps/:guid/actions/stop', to: 'apps_v3#stop'
   get '/apps/:guid/env', to: 'apps_v3#show_env'
   patch '/apps/:guid/relationships/current_droplet', to: 'apps_v3#assign_current_droplet'
   get '/apps/:guid/relationships/current_droplet', to: 'apps_v3#current_droplet_relationship'
   get '/apps/:guid/droplets/current', to: 'apps_v3#current_droplet'
+  get '/apps/:guid/features', to: 'apps_v3#features'
+  get '/apps/:guid/features/:name', to: 'apps_v3#feature'
 
   # environment variables
   get '/apps/:guid/environment_variables', to: 'apps_v3#show_environment_variables'
@@ -24,11 +25,12 @@ Rails.application.routes.draw do
   get '/processes/:process_guid', to: 'processes#show'
   patch '/processes/:process_guid', to: 'processes#update'
   delete '/processes/:process_guid/instances/:index', to: 'processes#terminate'
-  put '/processes/:process_guid/scale', to: 'processes#scale'
+  post '/processes/:process_guid/actions/scale', to: 'processes#scale'
   get '/processes/:process_guid/stats', to: 'processes#stats'
   get '/apps/:app_guid/processes', to: 'processes#index'
   get '/apps/:app_guid/processes/:type', to: 'processes#show'
-  put '/apps/:app_guid/processes/:type/scale', to: 'processes#scale'
+  patch '/apps/:app_guid/processes/:type', to: 'processes#update'
+  post '/apps/:app_guid/processes/:type/actions/scale', to: 'processes#scale'
   delete '/apps/:app_guid/processes/:type/instances/:index', to: 'processes#terminate'
   get '/apps/:app_guid/processes/:type/stats', to: 'processes#stats'
 
@@ -41,9 +43,13 @@ Rails.application.routes.draw do
   delete '/packages/:guid', to: 'packages#destroy'
   get '/apps/:app_guid/packages', to: 'packages#index'
 
+  # builds
+  post '/builds', to: 'builds#create'
+  get '/builds/:guid', to: 'builds#show'
+
   # droplets
   post '/packages/:package_guid/droplets', to: 'droplets#create'
-  post '/droplets/:guid/copy', to: 'droplets#copy'
+  post '/droplets', to: 'droplets#copy'
   get '/droplets', to: 'droplets#index'
   get '/droplets/:guid', to: 'droplets#show'
   delete '/droplets/:guid', to: 'droplets#destroy'
@@ -67,7 +73,12 @@ Rails.application.routes.draw do
   get '/isolation_segments/:guid/relationships/organizations', to: 'isolation_segments#relationships_orgs'
   get '/isolation_segments/:guid/relationships/spaces', to: 'isolation_segments#relationships_spaces'
 
+  # jobs
+  get '/jobs/:guid', to: 'v3/jobs#show'
+
   # organizations
+  post '/organizations', to: 'organizations_v3#create'
+  get '/organizations/:guid', to: 'organizations_v3#show'
   get '/organizations', to: 'organizations_v3#index'
   get '/isolation_segments/:isolation_segment_guid/organizations', to: 'organizations_v3#index'
   get '/organizations/:guid/relationships/default_isolation_segment', to: 'organizations_v3#show_default_isolation_segment'
@@ -87,7 +98,9 @@ Rails.application.routes.draw do
   delete '/service_bindings/:guid', to: 'service_bindings#destroy'
 
   # spaces
+  post '/spaces', to: 'spaces_v3#create'
   get '/spaces', to: 'spaces_v3#index'
+  get '/spaces/:guid', to: 'spaces_v3#show'
   get '/spaces/:guid/relationships/isolation_segment', to: 'spaces_v3#show_isolation_segment'
   patch '/spaces/:guid/relationships/isolation_segment', to: 'spaces_v3#update_isolation_segment'
 
@@ -95,6 +108,7 @@ Rails.application.routes.draw do
   get '/tasks', to: 'tasks#index'
   get '/tasks/:task_guid', to: 'tasks#show'
   put '/tasks/:task_guid/cancel', to: 'tasks#cancel'
+  post '/tasks/:task_guid/actions/cancel', to: 'tasks#cancel'
 
   post '/apps/:app_guid/tasks', to: 'tasks#create'
   get '/apps/:app_guid/tasks', to: 'tasks#index'

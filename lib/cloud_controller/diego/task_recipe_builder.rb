@@ -29,6 +29,7 @@ module VCAP::CloudController
           log_source:                       TASK_LOG_SOURCE,
           max_pids:                         config[:diego][:pid_limit],
           memory_mb:                        task.memory_in_mb,
+          network:                          generate_network(task),
           privileged:                       config[:diego][:use_privileged_containers_for_running],
           trusted_system_certificates_path: STAGING_TRUSTED_SYSTEM_CERT_PATH,
           volume_mounts:                    generate_volume_mounts(app_volume_mounts),
@@ -40,11 +41,13 @@ module VCAP::CloudController
           certificate_properties:           ::Diego::Bbs::Models::CertificateProperties.new(
             organizational_unit: ["app:#{task.app.guid}"]
           ),
+          image_username:                   task.droplet.docker_receipt_username,
+          image_password:                   task.droplet.docker_receipt_password,
         )
       end
 
       def build_staging_task(config, staging_details)
-        lifecycle_type = staging_details.droplet.lifecycle_type
+        lifecycle_type = staging_details.lifecycle.type
         action_builder = LifecycleProtocol.protocol_for_type(lifecycle_type).staging_action_builder(config, staging_details)
 
         ::Diego::Bbs::Models::TaskDefinition.new(
@@ -68,6 +71,8 @@ module VCAP::CloudController
           certificate_properties:           ::Diego::Bbs::Models::CertificateProperties.new(
             organizational_unit: ["app:#{staging_details.package.app_guid}"]
           ),
+          image_username:                   staging_details.package.docker_username,
+          image_password:                   staging_details.package.docker_password,
         )
       end
 
@@ -77,7 +82,7 @@ module VCAP::CloudController
 
         auth      = "#{config[:internal_api][:auth_user]}:#{config[:internal_api][:auth_password]}"
         host_port = "#{config[:internal_service_hostname]}:#{port}"
-        path      = "/internal/v3/staging/#{staging_details.droplet.guid}/droplet_completed?start=#{staging_details.start_after_staging}"
+        path      = "/internal/v3/staging/#{staging_details.staging_guid}/build_completed?start=#{staging_details.start_after_staging}"
         "#{scheme}://#{auth}@#{host_port}#{path}"
       end
 
@@ -87,19 +92,16 @@ module VCAP::CloudController
         TaskCpuWeightCalculator.new(memory_in_mb: task.memory_in_mb).calculate
       end
 
+      def generate_network(task)
+        Protocol::ContainerNetworkInfo.new(task.app).to_bbs_network
+      end
+
       def find_staging_isolation_segment(staging_details)
         if staging_details.isolation_segment
           [staging_details.isolation_segment]
         else
           []
         end
-      end
-
-      def generate_annotation(config, lifecycle_type, staging_details)
-        {
-          lifecycle:           lifecycle_type,
-          completion_callback: staging_completion_callback(staging_details, config)
-        }.to_json
       end
 
       def generate_egress_rules(staging_details)

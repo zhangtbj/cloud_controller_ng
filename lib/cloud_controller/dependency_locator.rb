@@ -1,4 +1,5 @@
 require 'repositories/app_event_repository'
+require 'repositories/build_event_repository'
 require 'repositories/space_event_repository'
 require 'repositories/organization_event_repository'
 require 'repositories/route_event_repository'
@@ -33,6 +34,8 @@ module CloudController
     include VCAP::CloudController
 
     LARGE_COLLECTION_SIZE = 10_000
+    BUILDPACK_CACHE_DIR = 'buildpack_cache'.freeze
+    RESOURCE_POOL_DIR = 'app_bits_cache'.freeze
 
     attr_accessor :config
 
@@ -47,10 +50,6 @@ module CloudController
 
     def register(name, value)
       @dependencies[name] = value
-    end
-
-    def health_manager_client
-      @dependencies[:health_manager_client] || raise('health_manager_client not set')
     end
 
     def runners
@@ -125,7 +124,7 @@ module CloudController
       Blobstore::ClientProvider.provide(
         options:       options,
         directory_key: options.fetch(:droplet_directory_key),
-        root_dir:      'buildpack_cache',
+        root_dir:      BUILDPACK_CACHE_DIR,
         resource_type: :buildpack_cache
       )
     end
@@ -140,12 +139,22 @@ module CloudController
       )
     end
 
+    def legacy_global_app_bits_cache
+      options = @config.fetch(:resource_pool)
+
+      Blobstore::ClientProvider.provide(
+        options:       options,
+        directory_key: options.fetch(:resource_directory_key),
+      )
+    end
+
     def global_app_bits_cache
       options = @config.fetch(:resource_pool)
 
       Blobstore::ClientProvider.provide(
         options:       options,
-        directory_key: options.fetch(:resource_directory_key)
+        directory_key: options.fetch(:resource_directory_key),
+        root_dir:      RESOURCE_POOL_DIR,
       )
     end
 

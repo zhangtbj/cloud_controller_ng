@@ -2,9 +2,11 @@ require 'jobs/runtime/blobstore_delete.rb'
 require 'jobs/v3/buildpack_cache_delete'
 require 'actions/package_delete'
 require 'actions/task_delete'
+require 'actions/build_delete'
 require 'actions/droplet_delete'
 require 'actions/process_delete'
 require 'actions/route_mapping_delete'
+require 'actions/staging_cancel'
 
 module VCAP::CloudController
   class AppDelete
@@ -12,15 +14,13 @@ module VCAP::CloudController
 
     def initialize(user_audit_info)
       @user_audit_info = user_audit_info
-      @logger = Steno.logger('cc.action.app_delete')
     end
 
     def delete(apps, record_event: true)
-      apps = Array(apps)
-
       apps.each do |app|
         app.db.transaction(retry_on: [Sequel::SerializationFailure]) do
           app.lock!
+          logger.info("Deleting app: #{app.guid}")
 
           delete_subresources(app)
 
@@ -28,6 +28,7 @@ module VCAP::CloudController
 
           app.destroy
         end
+        logger.info("Deleted app: #{app.guid}")
       end
     end
 
@@ -48,7 +49,8 @@ module VCAP::CloudController
     def delete_subresources(app)
       PackageDelete.new(@user_audit_info).delete(app.packages)
       TaskDelete.new(@user_audit_info).delete(app.tasks)
-      DropletDelete.new(@user_audit_info, stagers).delete(app.droplets)
+      BuildDelete.new(StagingCancel.new(stagers)).delete(app.builds)
+      DropletDelete.new(@user_audit_info).delete(app.droplets)
       ProcessDelete.new(@user_audit_info).delete(app.processes)
       RouteMappingDelete.new(@user_audit_info).delete(route_mappings_to_delete(app))
       errors = ServiceBindingDelete.new(@user_audit_info).delete(app.service_bindings)
@@ -67,6 +69,10 @@ module VCAP::CloudController
     def delete_buildpack_cache(app)
       delete_job = Jobs::V3::BuildpackCacheDelete.new(app.guid)
       Jobs::Enqueuer.new(delete_job, queue: 'cc-generic').enqueue
+    end
+
+    def logger
+      @logger ||= Steno.logger('cc.action.app_delete')
     end
   end
 end

@@ -6,12 +6,11 @@ module VCAP::CloudController
     let(:user) { User.make }
     let(:user_email) { 'user@example.com' }
     let(:user_audit_info) { UserAuditInfo.new(user_email: 'user@example.com', user_guid: user.guid) }
-    let(:stagers) { instance_double(Stagers) }
 
-    subject(:droplet_delete) { DropletDelete.new(user_audit_info, stagers) }
+    subject(:droplet_delete) { DropletDelete.new(user_audit_info) }
 
     describe '#delete' do
-      let!(:droplet) { DropletModel.make(:staged) }
+      let!(:droplet) { DropletModel.make }
 
       it 'deletes the droplet record' do
         expect {
@@ -58,22 +57,6 @@ module VCAP::CloudController
           }.not_to change {
             Delayed::Job.count
           }
-        end
-      end
-
-      context 'when the droplet is staging' do
-        let(:stager) { instance_double(Diego::Stager) }
-        let!(:droplet) { DropletModel.make(state: DropletModel::STAGING_STATE) }
-
-        before do
-          allow(stagers).to receive(:stager_for_app).and_return(stager)
-          allow(stager).to receive(:stop_stage)
-        end
-
-        it 'sends a stop staging request' do
-          droplet_delete.delete([droplet])
-          expect(stagers).to have_received(:stager_for_app).with(droplet.app)
-          expect(stager).to have_received(:stop_stage).with(droplet.guid)
         end
       end
     end

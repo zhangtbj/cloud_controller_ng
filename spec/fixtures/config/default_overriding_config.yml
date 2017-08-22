@@ -19,9 +19,6 @@ app_domains:
   - customer-app-domain1.com
   - customer-app-domain2.com
 
-app_events:
-  cutoff_age_in_days: 31
-
 app_usage_events:
   cutoff_age_in_days: 31
 
@@ -54,6 +51,9 @@ uaa:
 
 logging:
   level: fatal # Keep at fatal to avoid lots of extraneous output in tests
+
+doppler:
+  url: 'wss://doppler.the-system-domain.com:443'
 
 message_bus_servers:
   - nats://127.0.0.1:4222
@@ -156,7 +156,6 @@ allowed_cors_domains:
 - http://sharon.corr
 
 users_can_select_backend: false
-default_to_diego_backend: true
 allow_app_ssh_access: true
 
 broker_client_timeout_seconds: 120

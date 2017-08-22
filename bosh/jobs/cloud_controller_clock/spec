@@ -4,17 +4,22 @@ name: cloud_controller_clock
 description: "The Cloud Controller clock periodically schedules Cloud Controller clean up tasks for app usage events, audit events, failed jobs, and more. Only single instance of this job is necessary."
 
 templates:
-  cloud_controller_clock.yml.erb: config/cloud_controller_ng.yml
+  bpm/cloud_controller_clock.yml.erb: config/bpm/cloud_controller_clock.yml
+  bin/cloud_controller_clock.erb: bin/cloud_controller_clock
+
+  cloud_controller_ng.yml.erb: config/cloud_controller_ng.yml
   cloud_controller_clock_ctl.erb: bin/cloud_controller_clock_ctl
   newrelic.yml.erb: config/newrelic.yml
   stacks.yml.erb: config/stacks.yml
+  drain.sh.erb: bin/drain
   ruby_version.sh.erb: bin/ruby_version.sh
   console.erb: bin/console
   pre-start.sh.erb: bin/pre-start
   mutual_tls_ca.crt.erb: config/certs/mutual_tls_ca.crt
   mutual_tls.crt.erb: config/certs/mutual_tls.crt
   mutual_tls.key.erb: config/certs/mutual_tls.key
-
+  uaa_ca.crt.erb: config/certs/uaa_ca.crt
+  db_ca.crt.erb: config/certs/db_ca.crt
 
 packages:
   - capi_utils
@@ -22,15 +27,19 @@ packages:
   - nginx
   - nginx_newrelic_plugin
   - libpq
-  - libmariadb
+  - mariadb_connector_c
   - ruby-2.3
 
 consumes:
-- name: nats
-  type: nats
+- name: database
+  type: database
   optional: true
 
 properties:
+  bpm.enabled:
+    description: "Experimental feature flag: Enable Bosh Process Manager"
+    default: false
+
   ssl.skip_cert_verify:
     description: "specifies that the job is allowed to skip ssl cert verification"
     default: false
@@ -48,15 +57,6 @@ properties:
       - name: example.com
       - name: tcp.example.com
         router_group_name: default-tcp
-
-  nats.user:
-    description: "Username for cc client to connect to NATS. Deprecated in favor of nats link."
-  nats.password:
-    description: "Password for cc client to connect to NATS. Deprecated in favor of nats link."
-  nats.port:
-    description: "IP port of Cloud Foundry NATS server. Deprecated in favor of nats link."
-  nats.machines:
-    description: "IP of each NATS cluster member. Deprecated in favor of nats link, which will be used if this is not provided."
 
   request_timeout_in_seconds:
     description: "Timeout for requests in seconds."
@@ -93,8 +93,6 @@ properties:
     default: 14400 # 4 hours
   cc.jobs.app_bits_packer.timeout_in_seconds:
     description: "The longest this job can take before it is cancelled"
-  cc.jobs.app_events_cleanup.timeout_in_seconds:
-    description: "The longest this job can take before it is cancelled"
   cc.jobs.app_usage_events_cleanup.timeout_in_seconds:
     description: "The longest this job can take before it is cancelled"
   cc.jobs.blobstore_delete.timeout_in_seconds:
@@ -106,7 +104,8 @@ properties:
   cc.jobs.droplet_upload.timeout_in_seconds:
     description: "The longest this job can take before it is cancelled"
   cc.jobs.diego_sync.timeout_in_seconds:
-    description: "The longest this job can take before it is cancelled"
+    description: "The longest the diego sync job can take before another is enqueued"
+    default: 600
 
   cc.app_events.cutoff_age_in_days:
     description: "How old an app event should stay in cloud controller database before being cleaned up"
@@ -128,7 +127,11 @@ properties:
     default: 31
 
   cc.pending_droplets.frequency_in_seconds:
-    description: "How often the droplet pending cleanup job runs"
+    description: "How often the pending droplets cleanup job runs"
+    default: 300
+
+  cc.pending_builds.frequency_in_seconds:
+    description: "How often the pending builds cleanup job runs"
     default: 300
 
   cc.diego_sync.frequency_in_seconds:
@@ -395,9 +398,17 @@ properties:
   ccdb.pool_timeout:
     default: 10
     description: "The timeout for Sequel pooled connections"
+  ccdb.ca_cert:
+    default: ~
+    description: "The ca cert to use when communicating with the database over SSL"
+  ccdb.ssl_verify_hostname:
+    default: false
+    description: "Verify that the database SSL certificate matches the host to which the connection is attempted"
 
   uaa.cc.token_secret:
     description: "Symmetric secret used to decode uaa tokens. Used for testing."
+  uaa.ca_cert:
+    description: "The certificate authority being used by UAA"
   uaa.url:
     description: "URL of the UAA server"
   uaa.ssl.port:
@@ -430,11 +441,11 @@ properties:
     description: "The port used to emit messages to the Metron agent"
     default: 3457
 
-  logger_endpoint.use_ssl:
-    description: "Whether to use ssl for logger endpoint listed at /v2/info"
+  doppler.use_ssl:
+    description: "Whether to use ssl for the doppler_logging_endpoint listed at /v2/info"
     default: true
-  logger_endpoint.port:
-    description: "Port for logger endpoint listed at /v2/info"
+  doppler.port:
+    description: "Port for doppler_logging_endpoint listed at /v2/info"
     default: 443
 
   cc.db_encryption_key:
@@ -453,9 +464,6 @@ properties:
   cc.users_can_select_backend:
     default: true
     description: "Allow non-admin users to switch their apps between DEA and Diego backends"
-  cc.default_to_diego_backend:
-    default: false
-    description: "Use Diego backend by default for new apps"
   cc.allow_app_ssh_access:
     default: true
     description: "Allow users to change the value of the app-level allow_ssh attribute"
@@ -533,6 +541,9 @@ properties:
   uaa.clients.cc-service-dashboards.scope:
     description: "Used to grant scope for SSO clients for service brokers"
     default: "openid,cloud_controller_service_permissions.read"
+
+  uaa.clients.cc_routing.secret:
+    description: "Used for fetching routing information from the Routing API"
 
   cc.install_buildpacks:
       description: "Set of buildpacks to install during deploy"
@@ -642,6 +653,12 @@ properties:
   cc.diego.temporary_droplet_download_mtls:
     description: "Temporary flag to enable mTLS droplet download to the bbs from cc"
     default: false
+  cc.diego.temporary_oci_buildpack_mode:
+    description: "Temporary flag to enable OCI buildpack flow. Valid values: 'oci-phase-1'"
   cc.diego.pid_limit:
     description: "Maximum pid limit for containerized work running user-provided code"
     default: 1024
+
+  routing_api.enabled:
+    description: "Whether to expose the routing_endpoint listed at /v2/info. Enable this after deploying the Routing API"
+    default: false

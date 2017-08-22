@@ -1,4 +1,5 @@
 require 'presenters/v3/paginated_list_presenter'
+require 'messages/orgs/organization_create_message'
 require 'messages/orgs/orgs_list_message'
 require 'presenters/v3/to_one_relationship_presenter'
 require 'messages/orgs/orgs_default_iso_seg_update_message'
@@ -8,6 +9,13 @@ require 'controllers/v3/mixins/sub_resource'
 
 class OrganizationsV3Controller < ApplicationController
   include SubResource
+
+  def show
+    org = fetch_org(params[:guid])
+    org_not_found! unless org && can_read_from_org?(org.guid)
+
+    render status: :ok, json: Presenters::V3::OrganizationPresenter.new(org)
+  end
 
   def index
     message = OrgsListMessage.from_params(subresource_query_params)
@@ -24,6 +32,22 @@ class OrganizationsV3Controller < ApplicationController
       path: base_url(resource: 'organizations'),
       message: message
     )
+  end
+
+  def create
+    unauthorized! unless can_write_globally? || user_org_creation_enabled?
+
+    message = VCAP::CloudController::OrganizationCreateMessage.create_from_http_request(params[:body])
+    unprocessable!(message.errors.full_messages) unless message.valid?
+
+    org = Organization.create(name: message.name)
+
+    render json: Presenters::V3::OrganizationPresenter.new(org), status: :created
+  rescue Sequel::ValidationFailed => e
+    if e.errors.on(:name)&.include?(:unique)
+      unprocessable!('Name must be unique')
+    end
+    unprocessable!(e.message)
   end
 
   def show_default_isolation_segment
@@ -63,6 +87,10 @@ class OrganizationsV3Controller < ApplicationController
   end
 
   private
+
+  def user_org_creation_enabled?
+    VCAP::CloudController::FeatureFlag.enabled?(:user_org_creation)
+  end
 
   def org_not_found!
     resource_not_found!(:organization)

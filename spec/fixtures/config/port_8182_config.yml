@@ -23,9 +23,6 @@ jobs:
   global:
     timeout_in_seconds: 14400
 
-app_events:
-  cutoff_age_in_days: 31
-
 app_usage_events:
   cutoff_age_in_days: 31
 
@@ -56,6 +53,9 @@ uaa:
 logging:
   file: /tmp/cloud_controller.8182.log
   level: fatal # Keep at fatal to avoid lots of extraneous output in tests
+
+doppler:
+  url: 'wss://doppler.the-system-domain.com:443'
 
 message_bus_servers:
   - nats://127.0.0.1:4222

@@ -1,15 +1,12 @@
 module VCAP::CloudController
   module Repositories
     class DropletEventRepository
-      CENSORED_FIELDS   = [:environment_variables].freeze
-      CENSORED_MESSAGE  = 'PRIVATE DATA HIDDEN'.freeze
-      def self.record_create_by_staging(droplet, user_audit_info, request_attrs, v3_app_name, space_guid, org_guid)
+      def self.record_create_by_staging(droplet, user_audit_info, v3_app_name, space_guid, org_guid)
         Loggregator.emit(droplet.app_guid, "Creating droplet for app with guid #{droplet.app_guid}")
 
         metadata = {
           droplet_guid: droplet.guid,
-          package_guid: droplet.package.guid,
-          request:      droplet_audit_hash(request_attrs)
+          package_guid: droplet.package.guid
         }
 
         Event.create(
@@ -95,14 +92,6 @@ module VCAP::CloudController
           space_guid:        space_guid,
           organization_guid: org_guid
         )
-      end
-
-      def self.droplet_audit_hash(request_attrs)
-        request_attrs.dup.tap do |attr|
-          CENSORED_FIELDS.map(&:to_s).each do |censored|
-            attr[censored] = CENSORED_MESSAGE if attr.key?(censored)
-          end
-        end
       end
     end
   end

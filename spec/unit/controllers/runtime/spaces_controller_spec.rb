@@ -6,6 +6,10 @@ module VCAP::CloudController
     let(:space_one) { Space.make(organization: organization_one) }
     let(:user_email) { Sham.email }
 
+    def decoded_guids
+      decoded_response['resources'].map { |r| r['metadata']['guid'] }
+    end
+
     describe 'Query Parameters' do
       it { expect(described_class).to be_queryable_by(:name) }
       it { expect(described_class).to be_queryable_by(:organization_guid) }
@@ -357,6 +361,33 @@ module VCAP::CloudController
           end
         end
 
+        describe 'enumerating services bound to a service-broker' do
+          let(:manager) { User.make(guid: 'manager-guid') }
+          let(:org) { Organization.make(guid: 'organization', manager_guids: [manager.guid], user_guids: org_user_guids) }
+          let(:space) { Space.make(
+            organization: org,
+            guid: 'space-guid',
+            manager_guids: space_manager_guids)
+          }
+          let(:org_user_guids) { [manager.guid] }
+          let(:space_manager_guids) { [manager.guid] }
+          let(:query) do
+            { service_broker_guid: @broker.guid }
+          end
+          let(:broker) { ServiceBroker.make(space: space, guid: 'service-broker-guid') }
+          let(:service) { Service.make(service_broker: broker, active: true, guid: 'service-guid') }
+          let!(:service_plan) { ServicePlan.make(service: service, public: false) }
+
+          before do
+            set_current_user_as_admin(user: manager)
+          end
+          it "returns the space's service" do
+            get "/v2/spaces/#{space.guid}/services?q=service_broker_guid:#{broker.guid}"
+            expect(last_response.status).to eq(200), last_response.body
+            expect(decoded_guids).to include(service.guid)
+          end
+        end
+
         describe 'Org Level' do
           describe 'OrgManager' do
             it_behaves_like(
@@ -485,10 +516,6 @@ module VCAP::CloudController
         set_current_user(user)
       end
 
-      def decoded_guids
-        decoded_response['resources'].map { |r| r['metadata']['guid'] }
-      end
-
       context 'when there is a private service broker in a space' do
         before(:each) do
           @broker       = ServiceBroker.make(space: space_one)
@@ -505,10 +532,25 @@ module VCAP::CloudController
         let(:manager) { make_manager_for_space(space_one) }
         let(:outside_manager) { make_manager_for_space(space_two) }
 
-        it 'should be visible to SpaceDevelopers' do
-          set_current_user(developer)
-          get "v2/spaces/#{space_one.guid}/services"
-          expect(decoded_guids).to include(@service.guid)
+        context 'when the user is a SpaceDeveloper' do
+          it 'is visible' do
+            set_current_user(developer)
+            get "v2/spaces/#{space_one.guid}/services"
+            expect(decoded_guids).to include(@service.guid)
+          end
+
+          context 'when inline-relations-depth is 1' do
+            it 'has a visible list of plans' do
+              set_current_user(developer)
+              get "v2/spaces/#{space_one.guid}/services?inline-relations-depth=1"
+              expect(last_response.status).to eq(200), last_response.body
+
+              scoped_service = decoded_response['resources'].find { |r| r['metadata']['guid'] == @service.guid }
+
+              expect(scoped_service['entity']['service_plans'].length).to eq(1)
+              expect(scoped_service['entity']['service_plans'][0]['metadata']['guid']).to eq(@service_plan.guid)
+            end
+          end
         end
 
         it 'should not be visible to outside SpaceDevelopers, even in their own space' do
@@ -520,25 +562,48 @@ module VCAP::CloudController
         it 'should be visible to SpaceManagers ' do
           set_current_user(manager)
           get "v2/spaces/#{space_one.guid}/services"
+          expect(last_response.status).to eq(200)
           expect(decoded_guids).to include(@service.guid)
         end
 
-        it 'should be visible to SpaceManagers' do
+        it 'should not be visible to SpaceManagers for another space' do
           set_current_user(outside_manager)
           get "v2/spaces/#{space_one.guid}/services"
-          expect(last_response).not_to be_ok
+          expect(last_response.status).to eq(403)
         end
 
         it 'should be visible to SpaceAuditor' do
           set_current_user(auditor)
           get "v2/spaces/#{space_one.guid}/services"
+          expect(last_response.status).to eq(200)
           expect(decoded_guids).to include(@service.guid)
         end
 
-        it 'should be visible to SpaceManagers' do
+        it 'should not be visible to SpaceAuditors for another space' do
           set_current_user(outside_auditor)
           get "v2/spaces/#{space_one.guid}/services"
-          expect(last_response).not_to be_ok
+          expect(last_response.status).to eq(403)
+        end
+
+        it 'should be visible to users with admin access' do
+          set_current_user_as_admin(user: outside_developer)
+          get "v2/spaces/#{space_one.guid}/services"
+          expect(last_response.status).to eq(200)
+          expect(decoded_guids).to include(@service.guid)
+        end
+
+        it 'should be visible to users with admin read access' do
+          set_current_user_as_admin_read_only(user: outside_developer)
+          get "v2/spaces/#{space_one.guid}/services"
+          expect(last_response.status).to eq(200)
+          expect(decoded_guids).to include(@service.guid)
+        end
+
+        it 'should be visible to users with global auditor access' do
+          set_current_user_as_global_auditor(user: outside_developer)
+          get "v2/spaces/#{space_one.guid}/services"
+          expect(last_response.status).to eq(200)
+          expect(decoded_guids).to include(@service.guid)
         end
       end
 
@@ -849,7 +914,7 @@ module VCAP::CloudController
             it 'does not delete any of the v2 apps' do
               expect {
                 delete "/v2/spaces/#{space_guid}?recursive=true"
-              }.to_not change { App.count }
+              }.to_not change { ProcessModel.count }
             end
 
             it 'does not delete any of the v3 apps' do
@@ -1701,7 +1766,7 @@ module VCAP::CloudController
       let(:user) { set_current_user(User.make) }
       let(:organization) { Organization.make }
       let(:space) { Space.make(organization: organization) }
-      let(:process) { VCAP::CloudController::AppFactory.make(state: 'STARTED') }
+      let(:process) { VCAP::CloudController::ProcessModelFactory.make(state: 'STARTED') }
 
       describe 'permissions' do
         {
@@ -1730,7 +1795,7 @@ module VCAP::CloudController
               unmapped_route = Route.make(space: space)
 
               delete "/v2/spaces/#{space.guid}/unmapped_routes"
-              expect(last_response.status).to eq(expected_return_value), "Expected #{expected_return_value}, got: #{last_response.status} with body: #{last_response.body}"
+              expect(last_response.status).to eq(expected_return_value), "Expected #{expected_return_value}, got: #{last_response.status} body: #{last_response.body} role: #{role}"
 
               if last_response.status == 204
                 expect(unmapped_route.exists?).to eq(false), "Expected route '#{unmapped_route.guid}' to not exist"
@@ -1752,17 +1817,32 @@ module VCAP::CloudController
           )
         end
 
+        context 'when a route is neither mapped to a route nor bound to a service instance' do
+          it 'deletes the route' do
+            unmapped_route = Route.make(space: space)
+
+            delete "/v2/spaces/#{space.guid}/unmapped_routes", {}, headers_for(user)
+
+            expect(last_response.status).to eq(204)
+            expect(unmapped_route.exists?).to eq(false)
+
+            expect(last_response.body).to be_empty
+            expect(Event.find(type: 'audit.route.delete-request')).not_to be_nil
+          end
+        end
+
         context 'when a route is mapped to an app' do
-          it 'does not delete it' do
+          it 'does not delete it and does not send any event to ...' do
             mapped_route = Route.make(space: space)
             RouteMappingModel.make(app: process.app, route: mapped_route, app_port: 9090)
 
             delete "/v2/spaces/#{space.guid}/unmapped_routes", {}, headers_for(user)
 
-            expect(last_response.status).to eq(204), "Expected 204, got: #{last_response.status} with body: #{last_response.body}"
-            expect(mapped_route.exists?).to eq(true), "Expected route '#{mapped_route.guid}' to exist"
+            expect(last_response.status).to eq(204)
+            expect(mapped_route.exists?).to eq(true)
 
             expect(last_response.body).to be_empty
+            expect(Event.all).to be_empty
           end
         end
 
@@ -1774,10 +1854,11 @@ module VCAP::CloudController
 
             delete "/v2/spaces/#{space.guid}/unmapped_routes", {}, headers_for(user)
 
-            expect(last_response.status).to eq(204), "Expected 204, got: #{last_response.status} with body: #{last_response.body}"
-            expect(mapped_route.exists?).to eq(true), "Expected route '#{mapped_route.guid}' to exist"
+            expect(last_response.status).to eq(204)
+            expect(mapped_route.exists?).to eq(true)
 
             expect(last_response.body).to be_empty
+            expect(Event.all).to be_empty
           end
         end
       end

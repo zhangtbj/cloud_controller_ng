@@ -1,5 +1,5 @@
 require 'securerandom'
-require_relative 'app_factory'
+require_relative 'process_model_factory'
 require_relative '../test_models'
 
 Sham.define do
@@ -49,6 +49,19 @@ module VCAP::CloudController
   AppModel.blueprint(:buildpack) do
   end
 
+  BuildModel.blueprint do
+    guid     { Sham.guid }
+    app      { AppModel.make }
+    state    { VCAP::CloudController::BuildModel::STAGED_STATE }
+  end
+
+  BuildModel.blueprint(:docker) do
+    guid     { Sham.guid }
+    state    { VCAP::CloudController::DropletModel::STAGING_STATE }
+    app { AppModel.make(droplet_guid: guid) }
+    buildpack_lifecycle_data { nil.tap { |_| object.save } }
+  end
+
   PackageModel.blueprint do
     guid     { Sham.guid }
     state    { VCAP::CloudController::PackageModel::CREATED_STATE }
@@ -66,27 +79,19 @@ module VCAP::CloudController
 
   DropletModel.blueprint do
     guid     { Sham.guid }
-    state    { VCAP::CloudController::DropletModel::STAGING_STATE }
-    app { AppModel.make }
-    staging_memory_in_mb { 123 }
-    buildpack_lifecycle_data { BuildpackLifecycleDataModel.make(droplet: object.save) }
-  end
-
-  DropletModel.blueprint(:staged) do
-    guid     { Sham.guid }
     state    { VCAP::CloudController::DropletModel::STAGED_STATE }
     app { AppModel.make }
-    staging_memory_in_mb { 123 }
     droplet_hash { Sham.guid }
     sha256_checksum { Sham.guid }
     buildpack_lifecycle_data { BuildpackLifecycleDataModel.make(droplet: object.save) }
   end
 
   DropletModel.blueprint(:docker) do
-    guid     { Sham.guid }
-    state    { VCAP::CloudController::DropletModel::STAGING_STATE }
+    guid { Sham.guid }
+    droplet_hash { nil }
+    sha256_checksum { nil }
+    state { VCAP::CloudController::DropletModel::STAGING_STATE }
     app { AppModel.make(droplet_guid: guid) }
-    staging_memory_in_mb { 123 }
     buildpack_lifecycle_data { nil.tap { |_| object.save } }
   end
 
@@ -94,7 +99,7 @@ module VCAP::CloudController
     guid { Sham.guid }
     app { AppModel.make }
     name { Sham.name }
-    droplet { DropletModel.make(:staged, app: app) }
+    droplet { DropletModel.make(app: app) }
     command { 'bundle exec rake' }
     state { VCAP::CloudController::TaskModel::RUNNING_STATE }
     memory_in_mb { 256 }
@@ -105,7 +110,7 @@ module VCAP::CloudController
     guid { Sham.guid }
     app { AppModel.make }
     name { Sham.name }
-    droplet { DropletModel.make(:staged, app: app) }
+    droplet { DropletModel.make(app: app) }
     command { 'bundle exec rake' }
     state { VCAP::CloudController::TaskModel::RUNNING_STATE }
     memory_in_mb { 256 }
@@ -116,7 +121,7 @@ module VCAP::CloudController
     guid { Sham.guid }
     app { AppModel.make }
     name { Sham.name }
-    droplet { DropletModel.make(:staged, app: app) }
+    droplet { DropletModel.make(app: app) }
     command { 'bundle exec rake' }
     state { VCAP::CloudController::TaskModel::CANCELING_STATE }
     memory_in_mb { 256 }
@@ -127,7 +132,7 @@ module VCAP::CloudController
     guid { Sham.guid }
     app { AppModel.make }
     name { Sham.name }
-    droplet { DropletModel.make(:staged, app: app) }
+    droplet { DropletModel.make(app: app) }
     command { 'bundle exec rake' }
     state { VCAP::CloudController::TaskModel::SUCCEEDED_STATE }
     memory_in_mb { 256 }
@@ -138,11 +143,19 @@ module VCAP::CloudController
     guid { Sham.guid }
     app { AppModel.make }
     name { Sham.name }
-    droplet { DropletModel.make(:staged, app: app) }
+    droplet { DropletModel.make(app: app) }
     command { 'bundle exec rake' }
     state { VCAP::CloudController::TaskModel::PENDING_STATE }
     memory_in_mb { 256 }
     sequence_id { Sham.sequence_id }
+  end
+
+  PollableJobModel.blueprint do
+    guid { Sham.guid }
+    operation { 'some.job' }
+    state { 'COMPLETE' }
+    resource_guid { Sham.guid }
+    resource_type { 'some' }
   end
 
   User.blueprint do
@@ -254,15 +267,16 @@ module VCAP::CloudController
     description       { Sham.description }
   end
 
-  # if you want to create an app with droplet, use AppFactory.make
+  # if you want to create an app with droplet, use ProcessModelFactory.make
   # This is because the lack of factory hooks in Machinist.
-  App.blueprint do
+  ProcessModel.blueprint do
     instances { 1 }
     type { 'web' }
+    diego { true }
     app { AppModel.make }
   end
 
-  App.blueprint(:process) do
+  ProcessModel.blueprint(:process) do
     app { AppModel.make }
     diego { true }
     instances { 1 }
@@ -270,8 +284,8 @@ module VCAP::CloudController
     metadata { {} }
   end
 
-  App.blueprint(:diego_runnable) do
-    app { AppModel.make(droplet: DropletModel.make(:staged)) }
+  ProcessModel.blueprint(:diego_runnable) do
+    app { AppModel.make(droplet: DropletModel.make) }
     diego { true }
     instances { 1 }
     type { Sham.name }
@@ -279,16 +293,7 @@ module VCAP::CloudController
     state { 'STARTED' }
   end
 
-  App.blueprint(:dea_runnable) do
-    app { AppModel.make(droplet: DropletModel.make(:staged)) }
-    diego { false }
-    instances { 1 }
-    type { Sham.name }
-    metadata { {} }
-    state { 'STARTED' }
-  end
-
-  App.blueprint(:docker) do
+  ProcessModel.blueprint(:docker) do
     app { AppModel.make(:docker) }
     diego { true }
     instances { 1 }
@@ -363,7 +368,7 @@ module VCAP::CloudController
   end
 
   AppEvent.blueprint do
-    app               { AppFactory.make }
+    app               { ProcessModelFactory.make }
     instance_guid     { Sham.guid }
     instance_index    { Sham.instance_index }
     exit_status       { Random.rand(256) }
@@ -390,8 +395,18 @@ module VCAP::CloudController
   end
 
   BuildpackLifecycleDataModel.blueprint do
-    buildpack { nil }
+    buildpacks { nil }
     stack { Stack.make.name }
+  end
+
+  BuildpackLifecycleBuildpackModel.blueprint do
+    admin_buildpack_name { Buildpack.make(name: 'ruby').name }
+    buildpack_url { nil }
+  end
+
+  BuildpackLifecycleBuildpackModel.blueprint(:custom_buildpack) do
+    admin_buildpack_name { nil }
+    buildpack_url { 'http://example.com/temporary' }
   end
 
   AppUsageEvent.blueprint do
@@ -467,6 +482,7 @@ module VCAP::CloudController
     app { AppModel.make }
     route { Route.make(space: app.space) }
     process_type { 'web' }
+    app_port { -1 }
   end
 
   TestModel.blueprint do

@@ -45,8 +45,34 @@ module VCAP::CloudController
     end
 
     describe 'Serialization' do
-      it { is_expected.to export_attributes :name, :free, :description, :service_guid, :extra, :unique_id, :public, :bindable, :active }
-      it { is_expected.to import_attributes :name, :free, :description, :service_guid, :extra, :unique_id, :public, :bindable }
+      it 'exports these attributes' do
+        is_expected.to export_attributes :name,
+                                         :free,
+                                         :description,
+                                         :service_guid,
+                                         :extra,
+                                         :unique_id,
+                                         :public,
+                                         :bindable,
+                                         :active,
+                                         :create_instance_schema,
+                                         :update_instance_schema,
+                                         :create_binding_schema
+      end
+
+      it 'imports these attributes' do
+        is_expected.to import_attributes :name,
+                                         :free,
+                                         :description,
+                                         :service_guid,
+                                         :extra,
+                                         :unique_id,
+                                         :public,
+                                         :bindable,
+                                         :create_instance_schema,
+                                         :update_instance_schema,
+                                         :create_binding_schema
+      end
     end
 
     describe '#save' do
@@ -195,6 +221,7 @@ module VCAP::CloudController
         let!(:service_instance) { ManagedServiceInstance.make(service_plan: service_plan, space: space) }
         let!(:service_instance2) { ManagedServiceInstance.make(service_plan: non_public_plan, space: space) }
         let!(:service_instance3) { ManagedServiceInstance.make(service_plan: inactive_plan, space: space) }
+        let!(:user_provided_service_instance) { UserProvidedServiceInstance.make(space: space) }
         let!(:other_service_instance) { ManagedServiceInstance.make(service_plan: other_plan, space: other_space) }
 
         before do
@@ -232,6 +259,38 @@ module VCAP::CloudController
         expect(visible).to include(visible_private_plan)
         expect(visible).not_to include(hidden_private_plan)
         expect(visible).not_to include(inactive_public_plan)
+      end
+    end
+
+    describe '.space_visible' do
+      it 'returns plans that are visible to the space' do
+        hidden_private_plan = ServicePlan.make(public: false)
+        visible_public_plan = ServicePlan.make(public: true)
+        visible_private_plan = ServicePlan.make(public: false)
+        inactive_public_plan = ServicePlan.make(public: true, active: false)
+
+        organization = Organization.make
+        space = Space.make(organization: organization)
+        ServicePlanVisibility.make(organization: organization, service_plan: visible_private_plan)
+
+        space_scoped_broker1 = ServiceBroker.make(space: space)
+        space_scoped_broker1_service = Service.make(service_broker: space_scoped_broker1)
+        space_scoped_broker1_plan = ServicePlan.make(service: space_scoped_broker1_service)
+        space_scoped_broker1_plan_inactive = ServicePlan.make(service: space_scoped_broker1_service, active: false)
+
+        space_scoped_broker2 = ServiceBroker.make(space: Space.make)
+        space_scoped_broker2_service = Service.make(service_broker: space_scoped_broker2)
+        space_scoped_broker2_plan = ServicePlan.make(service: space_scoped_broker2_service)
+
+        visible = ServicePlan.space_visible(space).all
+        expect(visible).to include(visible_public_plan)
+        expect(visible).to include(visible_private_plan)
+        expect(visible).not_to include(hidden_private_plan)
+        expect(visible).not_to include(inactive_public_plan)
+
+        expect(visible).to include(space_scoped_broker1_plan)
+        expect(visible).not_to include(space_scoped_broker1_plan_inactive)
+        expect(visible).not_to include(space_scoped_broker2_plan)
       end
     end
 

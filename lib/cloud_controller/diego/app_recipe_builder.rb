@@ -11,6 +11,8 @@ module VCAP::CloudController
     class AppRecipeBuilder
       include ::Diego::ActionBuilder
 
+      MONITORED_HEALTH_CHECK_TYPES = ['port', 'http', ''].map(&:freeze).freeze
+
       def initialize(config:, process:, ssh_key: SSHKey.new)
         @config      = config
         @process     = process
@@ -64,11 +66,14 @@ module VCAP::CloudController
           domain:                           APP_LRP_DOMAIN,
           volume_mounts:                    generate_volume_mounts,
           PlacementTags:                    [IsolationSegmentSelector.for_space(process.space)],
+          check_definition:                  generate_healthcheck_definition(desired_lrp_builder),
           routes:                           ::Diego::Bbs::Models::ProtoRoutes.new(routes: routes),
           max_pids:                         @config[:diego][:pid_limit],
           certificate_properties:           ::Diego::Bbs::Models::CertificateProperties.new(
             organizational_unit: ["app:#{process.app.guid}"]
           ),
+          image_username:                   process.current_droplet.docker_receipt_username,
+          image_password:                   process.current_droplet.docker_receipt_password,
         )
       end
 
@@ -103,8 +108,8 @@ module VCAP::CloudController
           {
             hostnames:         [i['hostname']],
             port:              i['port'],
-            router_group_guid: i['router_group_guid'],
-            route_service_url: i['route_service_url']
+            route_service_url: i['route_service_url'],
+            isolation_segment: IsolationSegmentSelector.for_space(process.space),
           }
         end
 
@@ -178,7 +183,7 @@ module VCAP::CloudController
       end
 
       def generate_environment_variables(lrp_builder)
-        environment_variables = lrp_builder.port_environment_variables
+        environment_variables = lrp_builder.port_environment_variables.clone
 
         env = Environment.new(process, EnvironmentVariableGroup.running.environment_json).as_json
         env.each do |i|
@@ -196,8 +201,37 @@ module VCAP::CloudController
         codependent(actions)
       end
 
+      def generate_healthcheck_definition(lrp_builder)
+        return unless MONITORED_HEALTH_CHECK_TYPES.include?(process.health_check_type)
+
+        desired_ports = lrp_builder.ports
+        checks = []
+        desired_ports.each_with_index do |port, index|
+          checks << build_check(port, index)
+        end
+
+        ::Diego::Bbs::Models::CheckDefinition.new(checks: checks)
+      end
+
+      def build_check(port, index)
+        if process.health_check_type == 'http' && index == 0
+          ::Diego::Bbs::Models::Check.new(http_check:
+            ::Diego::Bbs::Models::HTTPCheck.new(
+              path:               process.health_check_http_endpoint,
+              port:               port,
+            )
+          )
+        else
+          ::Diego::Bbs::Models::Check.new(tcp_check:
+            ::Diego::Bbs::Models::TCPCheck.new(
+              port:               port,
+            )
+          )
+        end
+      end
+
       def generate_monitor_action(lrp_builder)
-        return if process.health_check_type == 'none'
+        return unless MONITORED_HEALTH_CHECK_TYPES.include?(process.health_check_type)
 
         desired_ports = lrp_builder.ports
         actions       = []
@@ -205,7 +239,7 @@ module VCAP::CloudController
           actions << build_action(lrp_builder, port, index)
         end
 
-        action(timeout(parallel(actions), timeout_ms: 1000 * 30.seconds))
+        action(timeout(parallel(actions), timeout_ms: 1000 * 10.minutes))
       end
 
       def build_action(lrp_builder, port, index)
@@ -239,17 +273,7 @@ module VCAP::CloudController
       end
 
       def generate_network
-        network = ::Diego::Bbs::Models::Network.new(properties: [])
-        net_info = Protocol::ContainerNetworkInfo.new(process).to_h
-
-        net_info['properties'].each do |key, value|
-          network.properties << ::Diego::Bbs::Models::Network::PropertiesEntry.new(
-            key:   key,
-            value: value,
-          )
-        end
-
-        network
+        Protocol::ContainerNetworkInfo.new(process.app).to_bbs_network
       end
 
       def file_descriptor_limit

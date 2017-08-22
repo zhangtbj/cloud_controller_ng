@@ -5,7 +5,7 @@ RSpec.describe 'Tasks' do
   let(:user) { make_developer_for_space(space) }
   let(:app_model) { VCAP::CloudController::AppModel.make(space_guid: space.guid) }
   let(:droplet) do
-    VCAP::CloudController::DropletModel.make(:staged,
+    VCAP::CloudController::DropletModel.make(
       app_guid: app_model.guid,
       state:    VCAP::CloudController::DropletModel::STAGED_STATE,
     )
@@ -81,6 +81,10 @@ RSpec.describe 'Tasks' do
               'app' => {
                 'href' => "#{link_prefix}/v3/apps/#{app_model.guid}"
               },
+              'cancel' => {
+                'href' => "#{link_prefix}/v3/tasks/#{task1.guid}/actions/cancel",
+                'method' => 'POST',
+              },
               'droplet' => {
                 'href' => "#{link_prefix}/v3/droplets/#{app_model.droplet.guid}"
               }
@@ -105,6 +109,10 @@ RSpec.describe 'Tasks' do
               },
               'app' => {
                 'href' => "#{link_prefix}/v3/apps/#{app_model.guid}"
+              },
+              'cancel' => {
+                'href' => "#{link_prefix}/v3/tasks/#{task2.guid}/actions/cancel",
+                'method' => 'POST',
               },
               'droplet' => {
                 'href' => "#{link_prefix}/v3/droplets/#{app_model.droplet.guid}"
@@ -203,6 +211,10 @@ RSpec.describe 'Tasks' do
           'app' => {
             'href' => "#{link_prefix}/v3/apps/#{app_model.guid}"
           },
+          'cancel' => {
+            'href' => "#{link_prefix}/v3/tasks/#{task_guid}/actions/cancel",
+            'method' => 'POST',
+          },
           'droplet' => {
             'href' => "#{link_prefix}/v3/droplets/#{app_model.droplet.guid}"
           }
@@ -238,7 +250,7 @@ RSpec.describe 'Tasks' do
     end
   end
 
-  describe 'PUT /v3/tasks/:guid/cancel' do
+  describe 'PUT /v3/tasks/:guid/cancel (deprecated)' do
     it 'returns a json representation of the task with the requested guid' do
       task = VCAP::CloudController::TaskModel.make name: 'task', command: 'echo task', app_guid: app_model.guid
 
@@ -247,7 +259,40 @@ RSpec.describe 'Tasks' do
       put "/v3/tasks/#{task.guid}/cancel", nil, developer_headers
 
       expect(last_response.status).to eq(202)
-      parsed_body = JSON.load(last_response.body)
+      parsed_body = JSON.parse(last_response.body)
+      expect(parsed_body['guid']).to eq(task.guid)
+      expect(parsed_body['name']).to eq('task')
+      expect(parsed_body['command']).to eq('echo task')
+      expect(parsed_body['state']).to eq('CANCELING')
+      expect(parsed_body['result']).to eq({ 'failure_reason' => nil })
+
+      event = VCAP::CloudController::Event.last
+      expect(event.values).to include({
+        type:              'audit.app.task.cancel',
+        actor:             user.guid,
+        actor_type:        'user',
+        actor_name:        user_email,
+        actor_username:    user_name,
+        actee:             app_model.guid,
+        actee_type:        'app',
+        actee_name:        app_model.name,
+        space_guid:        space.guid,
+        organization_guid: space.organization.guid
+      })
+      expect(event.metadata['task_guid']).to eq(task.guid)
+    end
+  end
+
+  describe 'POST /v3/tasks/:guid/actions/cancel' do
+    it 'returns a json representation of the task with the requested guid' do
+      task = VCAP::CloudController::TaskModel.make name: 'task', command: 'echo task', app_guid: app_model.guid
+
+      stub_request(:delete, "http://nsync.service.cf.internal:8787/v1/tasks/#{task.guid}").to_return(status: 202)
+
+      post "/v3/tasks/#{task.guid}/actions/cancel", nil, developer_headers
+
+      expect(last_response.status).to eq(202)
+      parsed_body = JSON.parse(last_response.body)
       expect(parsed_body['guid']).to eq(task.guid)
       expect(parsed_body['name']).to eq('task')
       expect(parsed_body['command']).to eq('echo task')
@@ -328,6 +373,10 @@ RSpec.describe 'Tasks' do
                 'app' => {
                   'href' => "#{link_prefix}/v3/apps/#{app_model.guid}"
                 },
+                'cancel' => {
+                  'href' => "#{link_prefix}/v3/tasks/#{task1.guid}/actions/cancel",
+                  'method' => 'POST',
+                },
                 'droplet' => {
                   'href' => "#{link_prefix}/v3/droplets/#{app_model.droplet.guid}"
                 }
@@ -353,6 +402,10 @@ RSpec.describe 'Tasks' do
                 },
                 'app' => {
                   'href' => "#{link_prefix}/v3/apps/#{app_model.guid}"
+                },
+                'cancel' => {
+                  'href' => "#{link_prefix}/v3/tasks/#{task2.guid}/actions/cancel",
+                  'method' => 'POST',
                 },
                 'droplet' => {
                   'href' => "#{link_prefix}/v3/droplets/#{app_model.droplet.guid}"
@@ -475,7 +528,7 @@ RSpec.describe 'Tasks' do
         disk_in_mb:   1000,
       }
 
-      post "/v3/apps/#{app_model.guid}/tasks", body, developer_headers
+      post "/v3/apps/#{app_model.guid}/tasks", body.to_json, developer_headers
 
       parsed_response = MultiJson.load(last_response.body)
       guid            = parsed_response['guid']
@@ -501,6 +554,10 @@ RSpec.describe 'Tasks' do
           },
           'app' => {
             'href' => "#{link_prefix}/v3/apps/#{app_model.guid}"
+          },
+          'cancel' => {
+            'href' => "#{link_prefix}/v3/tasks/#{guid}/actions/cancel",
+            'method' => 'POST',
           },
           'droplet' => {
             'href' => "#{link_prefix}/v3/droplets/#{droplet.guid}"
@@ -537,7 +594,7 @@ RSpec.describe 'Tasks' do
 
     context 'when requesting a specific droplet' do
       let(:non_assigned_droplet) do
-        VCAP::CloudController::DropletModel.make(:staged,
+        VCAP::CloudController::DropletModel.make(
           app_guid: app_model.guid,
           state:    VCAP::CloudController::DropletModel::STAGED_STATE,
         )
@@ -551,7 +608,7 @@ RSpec.describe 'Tasks' do
           droplet_guid: non_assigned_droplet.guid
         }
 
-        post "/v3/apps/#{app_model.guid}/tasks", body, developer_headers
+        post "/v3/apps/#{app_model.guid}/tasks", body.to_json, developer_headers
 
         parsed_response = MultiJson.load(last_response.body)
         guid            = parsed_response['guid']

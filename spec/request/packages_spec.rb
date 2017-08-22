@@ -18,13 +18,14 @@ RSpec.describe 'Packages' do
     end
 
     let(:type) { 'docker' }
-    let(:data) { { image: 'registry/image:latest' } }
+    let(:data) { { image: 'registry/image:latest', username: 'my-docker-username', password: 'my-password' } }
+    let(:expected_data) { { image: 'registry/image:latest', username: 'my-docker-username', password: '***' } }
     let(:relationships) { { app: { data: { guid: app_model.guid } } } }
 
     describe 'creation' do
       it 'creates a package' do
         expect {
-          post '/v3/packages', { type: type, data: data, relationships: relationships }, user_header
+          post '/v3/packages', { type: type, data: data, relationships: relationships }.to_json, user_header
         }.to change { VCAP::CloudController::PackageModel.count }.by(1)
 
         package = VCAP::CloudController::PackageModel.last
@@ -34,6 +35,8 @@ RSpec.describe 'Packages' do
           'type'       => type,
           'data'       => {
             'image'    => 'registry/image:latest',
+            'username' => 'my-docker-username',
+            'password' => '***'
           },
           'state'      => 'READY',
           'created_at' => iso8601,
@@ -41,7 +44,6 @@ RSpec.describe 'Packages' do
           'links' => {
             'self' => { 'href' => "#{link_prefix}/v3/packages/#{package.guid}" },
             'app'  => { 'href' => "#{link_prefix}/v3/apps/#{guid}" },
-            'stage' => { 'href' => "#{link_prefix}/v3/packages/#{package.guid}/droplets", 'method' => 'POST' },
           }
         }
 
@@ -49,7 +51,7 @@ RSpec.describe 'Packages' do
           package_guid: package.guid,
           request: {
             type: type,
-            data: data,
+            data: expected_data,
             relationships: relationships
           }
         }.to_json
@@ -88,7 +90,7 @@ RSpec.describe 'Packages' do
               relationships: {
                 app: { data: { guid: guid } },
               }
-            },
+            }.to_json,
             user_header
         }.to change { VCAP::CloudController::PackageModel.count }.by(1)
 
@@ -98,7 +100,9 @@ RSpec.describe 'Packages' do
           'guid'       => package.guid,
           'type'       => 'docker',
           'data'       => {
-            'image'    => 'http://awesome-sauce.com'
+            'image'    => 'http://awesome-sauce.com',
+            'username' => nil,
+            'password' => nil,
           },
           'state'      => 'READY',
           'created_at' => iso8601,
@@ -106,7 +110,6 @@ RSpec.describe 'Packages' do
           'links' => {
             'self' => { 'href' => "#{link_prefix}/v3/packages/#{package.guid}" },
             'app'  => { 'href' => "#{link_prefix}/v3/apps/#{guid}" },
-            'stage' => { 'href' => "#{link_prefix}/v3/packages/#{package.guid}/droplets", 'method' => 'POST' },
           }
         }
 
@@ -180,7 +183,6 @@ RSpec.describe 'Packages' do
               'self'   => { 'href' => "#{link_prefix}/v3/packages/#{package2.guid}" },
               'upload' => { 'href' => "#{link_prefix}/v3/packages/#{package2.guid}/upload", 'method' => 'POST' },
               'download' => { 'href' => "#{link_prefix}/v3/packages/#{package2.guid}/download", 'method' => 'GET' },
-              'stage' => { 'href' => "#{link_prefix}/v3/packages/#{package2.guid}/droplets", 'method' => 'POST' },
               'app' => { 'href' => "#{link_prefix}/v3/apps/#{guid}" },
             }
           },
@@ -198,7 +200,6 @@ RSpec.describe 'Packages' do
               'self'   => { 'href' => "#{link_prefix}/v3/packages/#{package.guid}" },
               'upload' => { 'href' => "#{link_prefix}/v3/packages/#{package.guid}/upload", 'method' => 'POST' },
               'download' => { 'href' => "#{link_prefix}/v3/packages/#{package.guid}/download", 'method' => 'GET' },
-              'stage' => { 'href' => "#{link_prefix}/v3/packages/#{package.guid}/droplets", 'method' => 'POST' },
               'app' => { 'href' => "#{link_prefix}/v3/apps/#{guid}" },
             }
           },
@@ -335,7 +336,6 @@ RSpec.describe 'Packages' do
               'self'   => { 'href' => "#{link_prefix}/v3/packages/#{bits_package.guid}" },
               'upload' => { 'href' => "#{link_prefix}/v3/packages/#{bits_package.guid}/upload", 'method' => 'POST' },
               'download' => { 'href' => "#{link_prefix}/v3/packages/#{bits_package.guid}/download", 'method' => 'GET' },
-              'stage' => { 'href' => "#{link_prefix}/v3/packages/#{bits_package.guid}/droplets", 'method' => 'POST' },
               'app' => { 'href' => "#{link_prefix}/v3/apps/#{bits_package.app_guid}" },
             }
           },
@@ -343,7 +343,9 @@ RSpec.describe 'Packages' do
             'guid'       => docker_package.guid,
             'type'       => 'docker',
             'data'       => {
-              'image'    => 'http://location-of-image.com'
+              'image'    => 'http://location-of-image.com',
+              'username' => nil,
+              'password' => nil,
             },
             'state'      => VCAP::CloudController::PackageModel::READY_STATE,
             'created_at' => iso8601,
@@ -351,7 +353,6 @@ RSpec.describe 'Packages' do
             'links' => {
               'self' => { 'href' => "#{link_prefix}/v3/packages/#{docker_package.guid}" },
               'app'  => { 'href' => "#{link_prefix}/v3/apps/#{docker_package.app_guid}" },
-              'stage' => { 'href' => "#{link_prefix}/v3/packages/#{docker_package.guid}/droplets", 'method' => 'POST' },
             }
           }
         ]
@@ -568,7 +569,6 @@ RSpec.describe 'Packages' do
           'self'   => { 'href' => "#{link_prefix}/v3/packages/#{guid}" },
           'upload' => { 'href' => "#{link_prefix}/v3/packages/#{guid}/upload", 'method' => 'POST' },
           'download' => { 'href' => "#{link_prefix}/v3/packages/#{guid}/download", 'method' => 'GET' },
-          'stage' => { 'href' => "#{link_prefix}/v3/packages/#{guid}/droplets", 'method' => 'POST' },
           'app' => { 'href' => "#{link_prefix}/v3/apps/#{app_model.guid}" },
         }
       }
@@ -594,6 +594,7 @@ RSpec.describe 'Packages' do
     before do
       space.organization.add_user(user)
       space.add_developer(user)
+      TestConfig.override(directories: { tmpdir: tmpdir })
     end
 
     let(:packages_params) do
@@ -606,7 +607,7 @@ RSpec.describe 'Packages' do
     it 'uploads the bits for the package' do
       expect(Delayed::Job.count).to eq 0
 
-      post "/v3/packages/#{guid}/upload", packages_params, user_header
+      post "/v3/packages/#{guid}/upload", packages_params.to_json, user_header
 
       expect(Delayed::Job.count).to eq 1
 
@@ -624,7 +625,6 @@ RSpec.describe 'Packages' do
           'self'   => { 'href' => "#{link_prefix}/v3/packages/#{guid}" },
           'upload' => { 'href' => "#{link_prefix}/v3/packages/#{guid}/upload", 'method' => 'POST' },
           'download' => { 'href' => "#{link_prefix}/v3/packages/#{guid}/download", 'method' => 'GET' },
-          'stage' => { 'href' => "#{link_prefix}/v3/packages/#{guid}/droplets", 'method' => 'POST' },
           'app' => { 'href' => "#{link_prefix}/v3/apps/#{app_model.guid}" },
         }
       }
@@ -675,9 +675,10 @@ RSpec.describe 'Packages' do
     end
 
     before do
+      TestConfig.override(directories: { tmpdir: File.dirname(temp_file) })
       space.organization.add_user(user)
       space.add_developer(user)
-      post "/v3/packages/#{guid}/upload", upload_body, user_header
+      post "/v3/packages/#{guid}/upload", upload_body.to_json, user_header
       Delayed::Worker.new.work_off
     end
 
@@ -724,11 +725,15 @@ RSpec.describe 'Packages' do
       space.add_developer user
     end
 
-    it 'deletes a package' do
-      expect {
-        delete "/v3/packages/#{guid}", {}, user_header
-      }.to change { VCAP::CloudController::PackageModel.count }.by(-1)
-      expect(last_response.status).to eq(204)
+    it 'deletes a package asynchronously' do
+      delete "/v3/packages/#{guid}", {}, user_header
+
+      expect(last_response.status).to eq(202)
+      expect(last_response.body).to eq('')
+      expect(last_response.header['Location']).to match(%r(jobs/[a-fA-F0-9-]+))
+      execute_all_jobs(expected_successes: 2, expected_failures: 0)
+      get "/v3/packages/#{guid}", {}, user_header
+      expect(last_response.status).to eq(404)
 
       expected_metadata = { package_guid: guid }.to_json
 
@@ -746,6 +751,33 @@ RSpec.describe 'Packages' do
         space_guid:        space.guid,
         organization_guid: space.organization.guid
       })
+    end
+  end
+
+  describe 'PATCH /internal/v4/packages/:guid' do
+    let!(:package_model) { VCAP::CloudController::PackageModel.make(state: VCAP::CloudController::PackageModel::PENDING_STATE) }
+    let(:body) do
+      {
+        'state'     => 'READY',
+        'checksums' => [
+          {
+            'type'  => 'sha1',
+            'value' => 'potato'
+          },
+          {
+            'type'  => 'sha256',
+            'value' => 'potatoest'
+          }
+        ]
+      }.to_json
+    end
+    let(:guid) { package_model.guid }
+
+    it 'updates a package' do
+      patch "/internal/v4/packages/#{guid}", body
+
+      expect(last_response.status).to eq(204)
+      expect(last_response.body).to eq('')
     end
   end
 end

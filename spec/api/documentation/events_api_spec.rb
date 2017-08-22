@@ -123,7 +123,7 @@ RSpec.resource 'Events', type: [:api, :legacy_api] do
   get '/v2/events' do
     standard_list_parameters VCAP::CloudController::EventsController
 
-    let(:test_app) { VCAP::CloudController::App.make }
+    let(:test_app) { VCAP::CloudController::ProcessModel.make }
     let(:test_v3app) { VCAP::CloudController::AppModel.make }
     let(:test_assignee) { VCAP::CloudController::User.make }
     let(:test_user) { VCAP::CloudController::User.make }
@@ -141,16 +141,11 @@ RSpec.resource 'Events', type: [:api, :legacy_api] do
 
     let(:app_request) do
       {
-        'name'                    => 'new',
-        'instances'               => 1,
-        'memory'                  => 84,
-        'state'                   => 'STOPPED',
-        'environment_json'        => { 'super' => 'secret' },
-        'docker_credentials_json' => {
-          'docker_user'     => 'user',
-          'docker_password' => 'password',
-          'docker_email'    => 'email'
-        }
+        'name'             => 'new',
+        'instances'        => 1,
+        'memory'           => 84,
+        'state'            => 'STOPPED',
+        'environment_json' => { 'super' => 'secret' },
       }
     end
     let(:space_request) do
@@ -175,9 +170,8 @@ RSpec.resource 'Events', type: [:api, :legacy_api] do
       }
     end
     let(:expected_app_request) do
-      expected_request                            = app_request
-      expected_request['environment_json']        = 'PRIVATE DATA HIDDEN'
-      expected_request['docker_credentials_json'] = 'PRIVATE DATA HIDDEN'
+      expected_request                     = app_request
+      expected_request['environment_json'] = 'PRIVATE DATA HIDDEN'
       expected_request
     end
 
@@ -219,7 +213,7 @@ RSpec.resource 'Events', type: [:api, :legacy_api] do
         actee_type: 'organization',
         actee_name: test_organization.name,
         space_guid: '',
-        metadata: { 'request' => {} }
+        metadata:   { 'request' => {} }
       }
     end
 
@@ -235,7 +229,7 @@ RSpec.resource 'Events', type: [:api, :legacy_api] do
         actee_type: 'organization',
         actee_name: test_organization.name,
         space_guid: '',
-        metadata: { 'request' => {} }
+        metadata:   { 'request' => {} }
       }
     end
 
@@ -251,7 +245,7 @@ RSpec.resource 'Events', type: [:api, :legacy_api] do
         actee_type: 'organization',
         actee_name: test_organization.name,
         space_guid: '',
-        metadata: { 'request' => {} }
+        metadata:   { 'request' => {} }
       }
     end
 
@@ -619,15 +613,18 @@ RSpec.resource 'Events', type: [:api, :legacy_api] do
 
     example 'List Service Plan Create Events' do
       new_plan = VCAP::CloudController::ServicePlan.new(
-        guid:        'guid',
-        name:        'plan-name',
-        service:     test_service,
-        description: 'A plan',
-        unique_id:   'guid',
-        free:        true,
-        public:      true,
-        active:      true,
-        bindable:    true
+        guid:                   'guid',
+        name:                   'plan-name',
+        service:                test_service,
+        description:            'A plan',
+        unique_id:              'guid',
+        free:                   true,
+        public:                 true,
+        active:                 true,
+        bindable:               true,
+        create_instance_schema: '{}',
+        update_instance_schema: '{}',
+        create_binding_schema:  '{}'
       )
       service_event_repository.with_service_plan_event(new_plan) do
         new_plan.save
@@ -644,15 +641,18 @@ RSpec.resource 'Events', type: [:api, :legacy_api] do
         actee_name: new_plan.name,
         space_guid: '',
         metadata:   {
-          'name'         => new_plan.name,
-          'free'         => new_plan.free,
-          'description'  => new_plan.description,
-          'service_guid' => new_plan.service.guid,
-          'extra'        => new_plan.extra,
-          'unique_id'    => new_plan.unique_id,
-          'public'       => new_plan.public,
-          'active'       => new_plan.active,
-          'bindable'     => new_plan.bindable
+          'name'                   => new_plan.name,
+          'free'                   => new_plan.free,
+          'description'            => new_plan.description,
+          'service_guid'           => new_plan.service.guid,
+          'extra'                  => new_plan.extra,
+          'unique_id'              => new_plan.unique_id,
+          'public'                 => new_plan.public,
+          'active'                 => new_plan.active,
+          'bindable'               => new_plan.bindable,
+          'create_instance_schema' => new_plan.create_instance_schema,
+          'update_instance_schema' => new_plan.update_instance_schema,
+          'create_binding_schema'  => new_plan.create_binding_schema
         }
       }
     end
@@ -1119,10 +1119,10 @@ RSpec.resource 'Events', type: [:api, :legacy_api] do
     example 'List Service Binding Create Events' do
       space           = VCAP::CloudController::Space.make
       instance        = VCAP::CloudController::ManagedServiceInstance.make(space: space)
-      app             = VCAP::CloudController::AppFactory.make(space: space)
-      service_binding = VCAP::CloudController::ServiceBinding.make(service_instance: instance, app: app.app)
+      process         = VCAP::CloudController::ProcessModelFactory.make(space: space)
+      service_binding = VCAP::CloudController::ServiceBinding.make(service_instance: instance, app: process.app)
 
-      service_event_repository.record_service_binding_event(:create, service_binding)
+      VCAP::CloudController::Repositories::ServiceBindingEventRepository.record_create(service_binding, user_audit_info, { foo: 'bar' })
 
       client.get '/v2/events?q=type:audit.service_binding.create', {}, headers
       expect(status).to eq(200)
@@ -1136,8 +1136,7 @@ RSpec.resource 'Events', type: [:api, :legacy_api] do
         space_guid: instance.space_guid,
         metadata:   {
           'request' => {
-            'service_instance_guid' => instance.guid,
-            'app_guid'              => app.guid,
+            'foo' => 'bar',
           }
         }
       }
@@ -1146,10 +1145,10 @@ RSpec.resource 'Events', type: [:api, :legacy_api] do
     example 'List Service Binding Delete Events' do
       space           = VCAP::CloudController::Space.make
       instance        = VCAP::CloudController::ManagedServiceInstance.make(space: space)
-      app             = VCAP::CloudController::AppFactory.make(space: space)
-      service_binding = VCAP::CloudController::ServiceBinding.make(service_instance: instance, app: app.app)
+      process         = VCAP::CloudController::ProcessModelFactory.make(space: space)
+      service_binding = VCAP::CloudController::ServiceBinding.make(service_instance: instance, app: process.app)
 
-      service_event_repository.record_service_binding_event(:delete, service_binding)
+      VCAP::CloudController::Repositories::ServiceBindingEventRepository.record_delete(service_binding, user_audit_info)
 
       client.get '/v2/events?q=type:audit.service_binding.delete', {}, headers
       expect(status).to eq(200)
@@ -1162,7 +1161,10 @@ RSpec.resource 'Events', type: [:api, :legacy_api] do
         actee_name: '',
         space_guid: instance.space_guid,
         metadata:   {
-          'request' => {}
+          'request' => {
+            'service_instance_guid' => instance.guid,
+            'app_guid'              => process.guid,
+          }
         }
       }
     end

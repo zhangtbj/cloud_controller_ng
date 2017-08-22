@@ -2,6 +2,7 @@ require 'cloudfront-signer'
 require 'cloud_controller/blobstore/client'
 require 'presenters/api/staging_job_presenter'
 require 'utils/hash_utils'
+require 'actions/droplet_create'
 
 module VCAP::CloudController
   class StagingsController < RestController::BaseController
@@ -118,17 +119,32 @@ module VCAP::CloudController
     end
 
     def upload_droplet(guid)
-      droplet = DropletModel.find(guid: guid)
+      build = BuildModel.find(guid: guid)
 
-      raise ApiError.new_from_details('NotFound', guid) if droplet.nil?
-      raise ApiError.new_from_details('StagingError', "malformed droplet upload request for #{guid}") unless upload_path
+      droplet = droplet_from_build(build, guid)
+
+      raise ApiError.new_from_details('StagingError', "malformed droplet upload request for #{droplet.guid}") unless upload_path
       check_file_md5
 
-      logger.info 'v3-droplet.begin-upload', droplet_guid: guid
+      logger.info 'v3-droplet.begin-upload', droplet_guid: droplet.guid
 
-      droplet_upload_job = Jobs::V3::DropletUpload.new(upload_path, guid)
+      droplet_upload_job = Jobs::V3::DropletUpload.new(upload_path, droplet.guid)
 
       Jobs::Enqueuer.new(droplet_upload_job, queue: Jobs::LocalQueue.new(config)).enqueue
+    end
+
+    def droplet_from_build(build, guid)
+      if build.nil?
+        droplet = DropletModel.find(guid: guid)
+        raise ApiError.new_from_details('NotFound', guid) if droplet.nil?
+        droplet
+      else
+        create_droplet_from_build(build)
+      end
+    end
+
+    def create_droplet_from_build(build)
+      DropletCreate.new.create_buildpack_droplet(build)
     end
 
     def upload_path

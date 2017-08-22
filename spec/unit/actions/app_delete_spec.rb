@@ -9,7 +9,7 @@ module VCAP::CloudController
     let(:user_audit_info) { UserAuditInfo.new(user_guid: user.guid, user_email: user_email) }
 
     let!(:app) { AppModel.make }
-    let!(:app_dataset) { app }
+    let!(:app_dataset) { [app] }
 
     describe '#delete' do
       it 'deletes the app record' do
@@ -40,8 +40,18 @@ module VCAP::CloudController
           expect(app.exists?).to be_falsey
         end
 
+        it 'deletes associated builds' do
+          build = BuildModel.make(app: app)
+
+          expect {
+            app_delete.delete(app_dataset)
+          }.to change { BuildModel.count }.by(-1)
+          expect(build.exists?).to be_falsey
+          expect(app.exists?).to be_falsey
+        end
+
         it 'deletes associated droplets' do
-          droplet = DropletModel.make(:staged, app: app)
+          droplet = DropletModel.make(app: app)
 
           expect {
             app_delete.delete(app_dataset)
@@ -51,11 +61,11 @@ module VCAP::CloudController
         end
 
         it 'deletes associated processes' do
-          process = App.make(app: app)
+          process = ProcessModel.make(app: app)
 
           expect {
             app_delete.delete(app_dataset)
-          }.to change { App.count }.by(-1)
+          }.to change { ProcessModel.count }.by(-1)
           expect(process.exists?).to be_falsey
           expect(app.exists?).to be_falsey
         end

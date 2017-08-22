@@ -11,13 +11,12 @@ RSpec.describe 'Apps' do
 
   describe 'GET /v2/apps' do
     let!(:process) do
-      VCAP::CloudController::AppFactory.make(:unstaged,
+      VCAP::CloudController::ProcessModelFactory.make(:unstaged,
         app:                        VCAP::CloudController::AppModel.make(
           space:                 space,
           environment_variables: { 'RAILS_ENV' => 'staging' }
         ),
         command:                    'hello_world',
-        docker_credentials_json:    { 'docker_user' => 'bob', 'docker_password' => 'password', 'docker_email' => 'blah@blah.com' },
         health_check_type:          'http',
         health_check_http_endpoint: '/health'
       )
@@ -59,22 +58,23 @@ RSpec.describe 'Apps' do
               'command'                    => 'hello_world',
               'console'                    => false,
               'debug'                      => nil,
-              'staging_task_id'            => process.latest_droplet.guid,
+              'staging_task_id'            => process.latest_build.guid,
               'package_state'              => 'STAGED',
               'health_check_type'          => 'http',
               'health_check_timeout'       => nil,
               'health_check_http_endpoint' => '/health',
               'staging_failed_reason'      => nil,
               'staging_failed_description' => nil,
-              'diego'                      => false,
+              'diego'                      => true,
               'docker_image'               => nil,
+              'docker_credentials'         => {
+                'username' => nil,
+                'password' => nil
+              },
               'package_updated_at'         => iso8601,
               'detected_start_command'     => '',
               'enable_ssh'                 => true,
-              'docker_credentials_json'    => {
-                'redacted_message' => '[PRIVATE DATA HIDDEN]'
-              },
-              'ports'                      => nil,
+              'ports'                      => [8080],
               'space_url'                  => "/v2/spaces/#{space.guid}",
               'stack_url'                  => "/v2/stacks/#{process.stack.guid}",
               'routes_url'                 => "/v2/apps/#{process.guid}/routes",
@@ -88,7 +88,7 @@ RSpec.describe 'Apps' do
     end
 
     it 'does not list non-web processes' do
-      non_web_process = VCAP::CloudController::AppFactory.make(space: space, type: 'non-web')
+      non_web_process = VCAP::CloudController::ProcessModelFactory.make(space: space, type: 'non-web')
 
       get '/v2/apps', nil, headers_for(user)
       expect(last_response.status).to eq(200)
@@ -137,22 +137,23 @@ RSpec.describe 'Apps' do
                 'command'                    => 'hello_world',
                 'console'                    => false,
                 'debug'                      => nil,
-                'staging_task_id'            => process.latest_droplet.guid,
+                'staging_task_id'            => process.latest_build.guid,
                 'package_state'              => 'STAGED',
                 'health_check_type'          => 'http',
                 'health_check_timeout'       => nil,
                 'health_check_http_endpoint' => '/health',
                 'staging_failed_reason'      => nil,
                 'staging_failed_description' => nil,
-                'diego'                      => false,
+                'diego'                      => true,
                 'docker_image'               => nil,
+                'docker_credentials'         => {
+                  'username' => nil,
+                  'password' => nil
+                },
                 'package_updated_at'         => iso8601,
                 'detected_start_command'     => '',
                 'enable_ssh'                 => true,
-                'docker_credentials_json'    => {
-                  'redacted_message' => '[PRIVATE DATA HIDDEN]'
-                },
-                'ports'                      => nil,
+                'ports'                      => [8080],
                 'space_url'                  => "/v2/spaces/#{space.guid}",
                 'space'                      => {
                   'metadata' => {
@@ -251,8 +252,8 @@ RSpec.describe 'Apps' do
 
     describe 'filtering' do
       it 'filters by name' do
-        app = VCAP::CloudController::AppFactory.make
-        app.app.update(name: 'filter-name')
+        process = VCAP::CloudController::ProcessModelFactory.make
+        process.app.update(name: 'filter-name')
 
         get '/v2/apps?q=name:filter-name', nil, admin_headers
         parsed_response = MultiJson.load(last_response.body)
@@ -263,7 +264,7 @@ RSpec.describe 'Apps' do
       end
 
       it 'filters by space_guid' do
-        VCAP::CloudController::AppFactory.make
+        VCAP::CloudController::ProcessModelFactory.make
 
         get "/v2/apps?q=space_guid:#{space.guid}", nil, admin_headers
         parsed_response = MultiJson.load(last_response.body)
@@ -274,7 +275,7 @@ RSpec.describe 'Apps' do
       end
 
       it 'filters by organization_guid' do
-        VCAP::CloudController::AppFactory.make
+        VCAP::CloudController::ProcessModelFactory.make
 
         get "/v2/apps?q=organization_guid:#{space.organization.guid}", nil, admin_headers
         parsed_response = MultiJson.load(last_response.body)
@@ -285,36 +286,34 @@ RSpec.describe 'Apps' do
       end
 
       it 'filters by diego' do
-        app = VCAP::CloudController::AppFactory.make(diego: true)
+        VCAP::CloudController::ProcessModelFactory.make(diego: true)
 
         get '/v2/apps?q=diego:true', nil, admin_headers
         parsed_response = MultiJson.load(last_response.body)
 
         expect(last_response.status).to eq(200), "Response Body: #{last_response.body}"
-        expect(parsed_response['total_results']).to eq(1)
-        expect(parsed_response['resources'][0]['metadata']['guid']).to eq(app.guid)
+        expect(parsed_response['total_results']).to eq(2)
       end
 
       it 'filters by stack_guid' do
-        search_app = VCAP::CloudController::AppFactory.make
+        search_process = VCAP::CloudController::ProcessModelFactory.make
 
-        get "/v2/apps?q=stack_guid:#{search_app.stack.guid}", nil, admin_headers
+        get "/v2/apps?q=stack_guid:#{search_process.stack.guid}", nil, admin_headers
         parsed_response = MultiJson.load(last_response.body)
 
         expect(last_response.status).to eq(200)
         expect(parsed_response['total_results']).to eq(1)
-        expect(parsed_response['resources'][0]['entity']['stack_guid']).to eq(search_app.stack.guid)
+        expect(parsed_response['resources'][0]['entity']['stack_guid']).to eq(search_process.stack.guid)
       end
     end
   end
 
   describe 'GET /v2/apps/:guid' do
     let!(:process) do
-      VCAP::CloudController::AppFactory.make(
-        space:                   space,
-        name:                    'app-name',
-        docker_credentials_json: { 'docker_user' => 'bob', 'docker_password' => 'password', 'docker_email' => 'blah@blah.com' },
-        command:                 'app-command'
+      VCAP::CloudController::ProcessModelFactory.make(
+        space:   space,
+        name:    'app-name',
+        command: 'app-command'
       )
     end
 
@@ -348,22 +347,23 @@ RSpec.describe 'Apps' do
             'command'                    => 'app-command',
             'console'                    => false,
             'debug'                      => nil,
-            'staging_task_id'            => process.latest_droplet.guid,
+            'staging_task_id'            => process.latest_build.guid,
             'package_state'              => 'STAGED',
             'health_check_type'          => 'port',
             'health_check_timeout'       => nil,
             'health_check_http_endpoint' => nil,
             'staging_failed_reason'      => nil,
             'staging_failed_description' => nil,
-            'diego'                      => false,
+            'diego'                      => true,
             'docker_image'               => nil,
+            'docker_credentials'         => {
+              'username' => nil,
+              'password' => nil
+            },
             'package_updated_at'         => iso8601,
             'detected_start_command'     => '',
             'enable_ssh'                 => true,
-            'docker_credentials_json'    => {
-              'redacted_message' => '[PRIVATE DATA HIDDEN]'
-            },
-            'ports'                      => nil,
+            'ports'                      => [8080],
             'space_url'                  => "/v2/spaces/#{process.space.guid}",
             'stack_url'                  => "/v2/stacks/#{process.stack.guid}",
             'routes_url'                 => "/v2/apps/#{process.guid}/routes",
@@ -376,7 +376,7 @@ RSpec.describe 'Apps' do
     end
 
     it 'does not display non-web processes' do
-      non_web_process = VCAP::CloudController::AppFactory.make(space: space, type: 'non-web')
+      non_web_process = VCAP::CloudController::ProcessModelFactory.make(space: space, type: 'non-web')
 
       get "/v2/apps/#{non_web_process.guid}", nil, headers_for(user)
       expect(last_response.status).to eq(404)
@@ -387,17 +387,16 @@ RSpec.describe 'Apps' do
     it 'creates an app' do
       stack       = VCAP::CloudController::Stack.make
       post_params = MultiJson.dump({
-        name:                    'maria',
-        space_guid:              space.guid,
-        stack_guid:              stack.guid,
-        docker_credentials_json: { 'docker_user' => 'bob', 'docker_password' => 'password', 'docker_email' => 'blah@blah.com' },
-        environment_json:        { 'KEY' => 'val' },
+        name:             'maria',
+        space_guid:       space.guid,
+        stack_guid:       stack.guid,
+        environment_json: { 'KEY' => 'val' },
       })
 
       post '/v2/apps', post_params, headers_for(user)
 
-      process = VCAP::CloudController::App.last
-      expect(last_response.status).to eq(201)
+      process = VCAP::CloudController::ProcessModel.last
+      expect(last_response.status).to eq(201), last_response.body
       expect(MultiJson.load(last_response.body)).to be_a_response_like(
         {
           'metadata' => {
@@ -430,13 +429,16 @@ RSpec.describe 'Apps' do
             'health_check_http_endpoint' => nil,
             'staging_failed_reason'      => nil,
             'staging_failed_description' => nil,
-            'diego'                      => false,
+            'diego'                      => true,
             'docker_image'               => nil,
+            'docker_credentials'         => {
+              'username' => nil,
+              'password' => nil
+            },
             'package_updated_at'         => nil,
             'detected_start_command'     => '',
             'enable_ssh'                 => true,
-            'docker_credentials_json'    => { 'redacted_message' => '[PRIVATE DATA HIDDEN]' },
-            'ports'                      => nil,
+            'ports'                      => [8080],
             'space_url'                  => "/v2/spaces/#{space.guid}",
             'stack_url'                  => "/v2/stacks/#{process.stack.guid}",
             'routes_url'                 => "/v2/apps/#{process.guid}/routes",
@@ -451,16 +453,16 @@ RSpec.describe 'Apps' do
     describe 'docker apps' do
       it 'creates the app' do
         post_params = MultiJson.dump({
-          name:                    'maria',
-          space_guid:              space.guid,
-          docker_image:            'cloudfoundry/diego-docker-app:latest',
-          docker_credentials_json: { 'docker_user' => 'bob', 'docker_password' => 'password', 'docker_email' => 'blah@blah.com' },
-          environment_json:        { 'KEY' => 'val' },
+          name:               'maria',
+          space_guid:         space.guid,
+          docker_image:       'cloudfoundry/diego-docker-app:latest',
+          docker_credentials: { 'username' => 'bob', 'password' => 'password' },
+          environment_json:   { 'KEY' => 'val' },
         })
 
         post '/v2/apps', post_params, headers_for(user)
 
-        process = VCAP::CloudController::App.last
+        process = VCAP::CloudController::ProcessModel.last
         expect(last_response.status).to eq(201)
         expect(MultiJson.load(last_response.body)).to be_a_response_like(
           {
@@ -494,13 +496,16 @@ RSpec.describe 'Apps' do
               'health_check_http_endpoint' => nil,
               'staging_failed_reason'      => nil,
               'staging_failed_description' => nil,
-              'diego'                      => false,
+              'diego'                      => true,
               'docker_image'               => 'cloudfoundry/diego-docker-app:latest',
+              'docker_credentials'         => {
+                'username' => 'bob',
+                'password' => '***'
+              },
               'package_updated_at'         => iso8601,
               'detected_start_command'     => '',
               'enable_ssh'                 => true,
-              'docker_credentials_json'    => { 'redacted_message' => '[PRIVATE DATA HIDDEN]' },
-              'ports'                      => nil,
+              'ports'                      => [],
               'space_url'                  => "/v2/spaces/#{space.guid}",
               'stack_url'                  => "/v2/stacks/#{process.stack.guid}",
               'routes_url'                 => "/v2/apps/#{process.guid}/routes",
@@ -516,12 +521,11 @@ RSpec.describe 'Apps' do
 
   describe 'PUT /v2/apps/:guid' do
     let!(:process) {
-      VCAP::CloudController::AppFactory.make(
-        space:                   space,
-        name:                    'mario',
-        environment_json:        { 'RAILS_ENV' => 'staging' },
-        command:                 'hello_world',
-        docker_credentials_json: { 'docker_user' => 'bob', 'docker_password' => 'password', 'docker_email' => 'blah@blah.com' }
+      VCAP::CloudController::ProcessModelFactory.make(
+        space:            space,
+        name:             'mario',
+        environment_json: { 'RAILS_ENV' => 'staging' },
+        command:          'hello_world',
       )
     }
 
@@ -564,22 +568,23 @@ RSpec.describe 'Apps' do
             'command'                    => 'hello_world',
             'console'                    => false,
             'debug'                      => nil,
-            'staging_task_id'            => process.latest_droplet.guid,
+            'staging_task_id'            => process.latest_build.guid,
             'package_state'              => 'STAGED',
             'health_check_type'          => 'port',
             'health_check_timeout'       => nil,
             'health_check_http_endpoint' => nil,
             'staging_failed_reason'      => nil,
             'staging_failed_description' => nil,
-            'diego'                      => false,
+            'diego'                      => true,
             'docker_image'               => nil,
+            'docker_credentials'         => {
+              'username' => nil,
+              'password' => nil
+            },
             'package_updated_at'         => iso8601,
             'detected_start_command'     => '',
             'enable_ssh'                 => true,
-            'docker_credentials_json'    => {
-              'redacted_message' => '[PRIVATE DATA HIDDEN]'
-            },
-            'ports'                      => nil,
+            'ports'                      => [8080],
             'space_url'                  => "/v2/spaces/#{space.guid}",
             'stack_url'                  => "/v2/stacks/#{process.stack.guid}",
             'routes_url'                 => "/v2/apps/#{process.guid}/routes",
@@ -594,15 +599,16 @@ RSpec.describe 'Apps' do
     describe 'docker apps' do
       let(:app_model) { VCAP::CloudController::AppModel.make(:docker, name: 'mario', space: space, environment_variables: { 'RAILS_ENV' => 'staging' }) }
       let!(:process) {
-        VCAP::CloudController::AppFactory.make(
-          app:                     app_model,
-          docker_credentials_json: { 'docker_user' => 'bob', 'docker_password' => 'password', 'docker_email' => 'blah@blah.com' },
-          docker_image:            'cloudfoundry/diego-docker-app:latest'
+        VCAP::CloudController::ProcessModelFactory.make(
+          app:          app_model,
+          docker_image: 'cloudfoundry/diego-docker-app:latest'
         )
       }
 
       before do
         VCAP::CloudController::FeatureFlag.make(name: 'diego_docker', enabled: true)
+        allow_any_instance_of(VCAP::CloudController::V2::AppStage).to receive(:stage).and_return(nil)
+        process.latest_package.update(docker_username: 'bob', docker_password: 'password')
       end
 
       it 'updates an app' do
@@ -643,22 +649,23 @@ RSpec.describe 'Apps' do
               'command'                    => nil,
               'console'                    => false,
               'debug'                      => nil,
-              'staging_task_id'            => process.latest_droplet.guid,
+              'staging_task_id'            => process.latest_build.guid,
               'package_state'              => 'STAGED',
               'health_check_type'          => 'port',
               'health_check_timeout'       => nil,
               'health_check_http_endpoint' => nil,
               'staging_failed_reason'      => nil,
               'staging_failed_description' => nil,
-              'diego'                      => false,
+              'diego'                      => true,
               'docker_image'               => 'cloudfoundry/diego-docker-app:latest',
+              'docker_credentials'         => {
+                'username' => 'bob',
+                'password' => '***'
+              },
               'package_updated_at'         => iso8601,
               'detected_start_command'     => '',
               'enable_ssh'                 => true,
-              'docker_credentials_json'    => {
-                'redacted_message' => '[PRIVATE DATA HIDDEN]'
-              },
-              'ports'                      => nil,
+              'ports'                      => [],
               'space_url'                  => "/v2/spaces/#{space.guid}",
               'stack_url'                  => "/v2/stacks/#{process.stack.guid}",
               'routes_url'                 => "/v2/apps/#{process.guid}/routes",
@@ -669,11 +676,89 @@ RSpec.describe 'Apps' do
           }
         )
       end
+
+      context 'when updating docker data' do
+        let(:update_params) do
+          MultiJson.dump({
+            name:               'maria',
+            environment_json:   { 'RAILS_ENV' => 'production' },
+            state:              'STARTED',
+            docker_image:       'cloudfoundry/diego-docker-app:even-more-latest',
+            docker_credentials: {
+              'username' => 'somedude',
+              'password' => 'secretfromdude',
+            },
+          })
+        end
+
+        it 'updates the app with docker data' do
+          # updating docker data will create a new package, which triggers staging. Therefore, package_state will
+          # become PENDING
+
+          put "/v2/apps/#{process.guid}", update_params, headers_for(user)
+
+          process.reload
+          expect(last_response.status).to eq(201)
+          expect(MultiJson.load(last_response.body)).to be_a_response_like(
+            {
+              'metadata' => {
+                'guid'       => process.guid,
+                'url'        => "/v2/apps/#{process.guid}",
+                'created_at' => iso8601,
+                'updated_at' => iso8601
+              },
+              'entity' => {
+                'name'                       => 'maria',
+                'production'                 => false,
+                'space_guid'                 => space.guid,
+                'stack_guid'                 => process.stack.guid,
+                'buildpack'                  => nil,
+                'detected_buildpack'         => nil,
+                'detected_buildpack_guid'    => nil,
+                'environment_json'           => {
+                  'RAILS_ENV' => 'production'
+                },
+                'memory'                     => 1024,
+                'instances'                  => 1,
+                'disk_quota'                 => 1024,
+                'state'                      => 'STARTED',
+                'version'                    => process.version,
+                'command'                    => nil,
+                'console'                    => false,
+                'debug'                      => nil,
+                'staging_task_id'            => process.latest_build.guid,
+                'package_state'              => 'PENDING',
+                'health_check_type'          => 'port',
+                'health_check_timeout'       => nil,
+                'health_check_http_endpoint' => nil,
+                'staging_failed_reason'      => nil,
+                'staging_failed_description' => nil,
+                'diego'                      => true,
+                'docker_image'               => 'cloudfoundry/diego-docker-app:even-more-latest',
+                'docker_credentials'         => {
+                  'username' => 'somedude',
+                  'password' => '***'
+                },
+                'package_updated_at'         => iso8601,
+                'detected_start_command'     => '',
+                'enable_ssh'                 => true,
+                'ports'                      => [],
+                'space_url'                  => "/v2/spaces/#{space.guid}",
+                'stack_url'                  => "/v2/stacks/#{process.stack.guid}",
+                'routes_url'                 => "/v2/apps/#{process.guid}/routes",
+                'events_url'                 => "/v2/apps/#{process.guid}/events",
+                'service_bindings_url'       => "/v2/apps/#{process.guid}/service_bindings",
+                'route_mappings_url'         => "/v2/apps/#{process.guid}/route_mappings"
+              }
+            }
+          )
+        end
+      end
     end
   end
 
   describe 'DELETE /v2/apps/:guid' do
-    let!(:process) { VCAP::CloudController::AppFactory.make(space: space) }
+    let!(:process) { VCAP::CloudController::ProcessModelFactory.make(space: space) }
 
     it 'deletes the specified app' do
       delete "/v2/apps/#{process.guid}", nil, headers_for(user)
@@ -688,7 +773,7 @@ RSpec.describe 'Apps' do
 
     describe 'docker apps' do
       let(:app_model) { VCAP::CloudController::AppModel.make(:docker, space: space) }
-      let!(:process) { VCAP::CloudController::AppFactory.make(app: app_model, docker_image: 'cloudfoundry/diego-docker-app:latest') }
+      let!(:process) { VCAP::CloudController::ProcessModelFactory.make(app: app_model, docker_image: 'cloudfoundry/diego-docker-app:latest') }
 
       it 'deletes the specified app' do
         delete "/v2/apps/#{process.guid}", nil, headers_for(user)
@@ -704,7 +789,7 @@ RSpec.describe 'Apps' do
   end
 
   describe 'GET /v2/apps/:guid/summary' do
-    let!(:process) { VCAP::CloudController::AppFactory.make(space: space, name: 'woo') }
+    let!(:process) { VCAP::CloudController::ProcessModelFactory.make(space: space, name: 'woo') }
 
     it 'gives a summary of the specified app' do
       private_domains = process.space.organization.private_domains
@@ -719,7 +804,7 @@ RSpec.describe 'Apps' do
 
       get "/v2/apps/#{process.guid}/summary", nil, headers_for(user)
 
-      expect(last_response.status).to eq(200)
+      expect(last_response.status).to eq(200), last_response.body
       expect(MultiJson.load(last_response.body)).to be_a_response_like(
         {
           'guid'                       => process.guid,
@@ -743,19 +828,18 @@ RSpec.describe 'Apps' do
           'command'                    => nil,
           'console'                    => false,
           'debug'                      => nil,
-          'staging_task_id'            => process.latest_droplet.guid,
+          'staging_task_id'            => process.latest_build.guid,
           'package_state'              => 'STAGED',
           'health_check_type'          => 'port',
           'health_check_timeout'       => nil,
           'health_check_http_endpoint' => nil,
           'staging_failed_reason'      => nil,
           'staging_failed_description' => nil,
-          'diego'                      => false,
+          'diego'                      => true,
           'docker_image'               => nil,
           'package_updated_at'         => iso8601,
           'detected_start_command'     => '',
           'enable_ssh'                 => true,
-          'docker_credentials_json'    => { 'redacted_message' => '[PRIVATE DATA HIDDEN]' },
           'ports'                      => nil
         })
     end
@@ -763,7 +847,7 @@ RSpec.describe 'Apps' do
 
   describe 'GET /v2/apps/:guid/env' do
     let(:process) do
-      VCAP::CloudController::AppFactory.make(
+      VCAP::CloudController::ProcessModelFactory.make(
         space:              space,
         name:               'potato',
         detected_buildpack: 'buildpack-name',
@@ -827,7 +911,7 @@ RSpec.describe 'Apps' do
   end
 
   describe 'GET /v2/apps/:guid/stats' do
-    let(:process) { VCAP::CloudController::AppFactory.make(state: 'STARTED', space: space) }
+    let(:process) { VCAP::CloudController::ProcessModelFactory.make(state: 'STARTED', space: space) }
     let(:instances_reporters) { instance_double(VCAP::CloudController::Diego::TpsInstancesReporter) }
     let(:instances_reporter_response) do
       {
@@ -905,7 +989,7 @@ RSpec.describe 'Apps' do
   end
 
   describe 'GET /v2/apps/:guid/instances' do
-    let!(:process) { VCAP::CloudController::AppFactory.make(diego: true, space: space, state: 'STARTED', instances: 2) }
+    let!(:process) { VCAP::CloudController::ProcessModelFactory.make(diego: true, space: space, state: 'STARTED', instances: 2) }
     let(:tps_url) { "http://tps.service.cf.internal:1518/v1/actual_lrps/#{process.guid}-#{process.version}" }
     let(:instances) { [
       { process_guid: process.guid, instance_guid: 'instance-A', index: 0, state: 'RUNNING', uptime: 0 },
@@ -936,7 +1020,7 @@ RSpec.describe 'Apps' do
   end
 
   describe 'DELETE /v2/apps/:guid/instances/:index' do
-    let(:process) { VCAP::CloudController::AppFactory.make(space: space, instances: 2, diego: true) }
+    let(:process) { VCAP::CloudController::ProcessModelFactory.make(space: space, instances: 2, diego: true) }
     let(:stop_url) { %r{http://nsync.service.cf.internal:8787/v1/apps/#{process.guid}.+/index/0} }
 
     before do
@@ -952,11 +1036,11 @@ RSpec.describe 'Apps' do
   end
 
   describe 'POST /v2/apps/:guid/restage' do
-    let(:process) { VCAP::CloudController::AppFactory.make(name: 'maria', space: space, diego: true) }
-    let(:stager) { instance_double(VCAP::CloudController::Dea::Stager, stage: nil) }
+    let(:process) { VCAP::CloudController::ProcessModelFactory.make(name: 'maria', space: space, diego: true) }
+    let(:stager) { instance_double(VCAP::CloudController::Diego::Stager, stage: nil) }
 
     before do
-      allow_any_instance_of(VCAP::CloudController::Stagers).to receive(:validate_app)
+      allow_any_instance_of(VCAP::CloudController::Stagers).to receive(:validate_process)
       allow_any_instance_of(VCAP::CloudController::Stagers).to receive(:stager_for_app).and_return(stager)
       VCAP::CloudController::Buildpack.make
     end
@@ -993,7 +1077,7 @@ RSpec.describe 'Apps' do
             'command'                    => nil,
             'console'                    => false,
             'debug'                      => nil,
-            'staging_task_id'            => process.latest_droplet.guid,
+            'staging_task_id'            => process.latest_build.guid,
             'package_state'              => 'PENDING',
             'health_check_type'          => 'port',
             'health_check_timeout'       => nil,
@@ -1002,13 +1086,14 @@ RSpec.describe 'Apps' do
             'staging_failed_description' => nil,
             'diego'                      => true,
             'docker_image'               => nil,
+            'docker_credentials'         => {
+              'username' => nil,
+              'password' => nil
+            },
             'package_updated_at'         => iso8601,
             'detected_start_command'     => '',
             'enable_ssh'                 => true,
-            'docker_credentials_json'    => {
-              'redacted_message' => '[PRIVATE DATA HIDDEN]'
-            },
-            'ports' => [8080]
+            'ports'                      => [8080]
           }
         }
       )
@@ -1016,13 +1101,17 @@ RSpec.describe 'Apps' do
   end
 
   describe 'PUT /v2/apps/:guid/bits' do
-    let(:process) { VCAP::CloudController::AppFactory.make(space: space) }
+    let(:process) { VCAP::CloudController::ProcessModelFactory.make(space: space) }
     let(:tmpdir) { Dir.mktmpdir }
     let(:valid_zip) do
       zip_name = File.join(tmpdir, 'file.zip')
       TestZip.create(zip_name, 1, 1024)
       zip_file = File.new(zip_name)
       Rack::Test::UploadedFile.new(zip_file)
+    end
+
+    before do
+      TestConfig.config[:directories][:tmpdir] = File.dirname(valid_zip.path)
     end
 
     it 'uploads the application bits' do
@@ -1044,8 +1133,8 @@ RSpec.describe 'Apps' do
   end
 
   describe 'POST /v2/apps/:guid/copy_bits' do
-    let!(:source_process) { VCAP::CloudController::AppFactory.make(space: space) }
-    let!(:destination_process) { VCAP::CloudController::AppFactory.make(space: space) }
+    let!(:source_process) { VCAP::CloudController::ProcessModelFactory.make(space: space) }
+    let!(:destination_process) { VCAP::CloudController::ProcessModelFactory.make(space: space) }
 
     it 'queues a job to copy the bits' do
       post "/v2/apps/#{destination_process.guid}/copy_bits", MultiJson.dump({ source_app_guid: source_process.guid }), headers_for(user)
@@ -1057,7 +1146,7 @@ RSpec.describe 'Apps' do
   end
 
   describe 'GET /v2/apps/:guid/download' do
-    let(:process) { VCAP::CloudController::AppFactory.make(space: space) }
+    let(:process) { VCAP::CloudController::ProcessModelFactory.make(space: space) }
     let(:tmpdir) { Dir.mktmpdir }
     let(:valid_zip) do
       zip_name = File.join(tmpdir, 'file.zip')
@@ -1067,6 +1156,7 @@ RSpec.describe 'Apps' do
     end
 
     before do
+      TestConfig.config[:directories][:tmpdir] = File.dirname(valid_zip.path)
       upload_params = {
         application: valid_zip,
         resources:   [{ fn: 'a/b/c', size: 1, sha1: 'sha' }].to_json
@@ -1083,7 +1173,7 @@ RSpec.describe 'Apps' do
   end
 
   describe 'GET /v2/apps/:guid/droplet/download' do
-    let(:process) { VCAP::CloudController::AppFactory.make(space: space) }
+    let(:process) { VCAP::CloudController::ProcessModelFactory.make(space: space) }
 
     before do
       droplet_file = Tempfile.new(process.guid)
@@ -1101,7 +1191,7 @@ RSpec.describe 'Apps' do
   end
 
   describe 'GET /v2/apps/:guid/service_bindings' do
-    let!(:process) { VCAP::CloudController::AppFactory.make(space: space) }
+    let!(:process) { VCAP::CloudController::ProcessModelFactory.make(space: space) }
     let!(:service_instance) { VCAP::CloudController::ManagedServiceInstance.make(space: process.space) }
     let!(:service_binding) do
       VCAP::CloudController::ServiceBinding.make(
@@ -1155,7 +1245,7 @@ RSpec.describe 'Apps' do
   end
 
   describe 'DELETE /v2/apps/:guid/service_binding/:guid' do
-    let!(:process) { VCAP::CloudController::AppFactory.make(space: space) }
+    let!(:process) { VCAP::CloudController::ProcessModelFactory.make(space: space) }
     let!(:service_instance) { VCAP::CloudController::ManagedServiceInstance.make(space: process.space) }
     let!(:service_binding) { VCAP::CloudController::ServiceBinding.make(service_instance: service_instance, app: process.app) }
 
@@ -1181,7 +1271,7 @@ RSpec.describe 'Apps' do
   end
 
   describe 'GET /v2/apps/:guid/routes' do
-    let!(:process) { VCAP::CloudController::AppFactory.make(space: space) }
+    let!(:process) { VCAP::CloudController::ProcessModelFactory.make(space: space) }
     let!(:route) { VCAP::CloudController::Route.make(space: space, host: 'youdontknowme') }
     let!(:route_mapping) { VCAP::CloudController::RouteMappingModel.make(app: process.app, process_type: process.type, route: route) }
 
@@ -1223,7 +1313,7 @@ RSpec.describe 'Apps' do
   end
 
   describe 'PUT /v2/apps/:guid/routes/:route_guid' do
-    let!(:process) { VCAP::CloudController::AppFactory.make(space: space) }
+    let!(:process) { VCAP::CloudController::ProcessModelFactory.make(space: space) }
     let!(:route) { VCAP::CloudController::Route.make(space: space) }
 
     it 'associates an app and a route' do
@@ -1257,20 +1347,23 @@ RSpec.describe 'Apps' do
             'command'                    => nil,
             'console'                    => false,
             'debug'                      => nil,
-            'staging_task_id'            => process.latest_droplet.guid,
+            'staging_task_id'            => process.latest_build.guid,
             'package_state'              => 'STAGED',
             'health_check_type'          => 'port',
             'health_check_timeout'       => nil,
             'health_check_http_endpoint' => nil,
             'staging_failed_reason'      => nil,
             'staging_failed_description' => nil,
-            'diego'                      => false,
+            'diego'                      => true,
             'docker_image'               => nil,
+            'docker_credentials'         => {
+              'username' => nil,
+              'password' => nil
+            },
             'package_updated_at'         => iso8601,
             'detected_start_command'     => '',
             'enable_ssh'                 => true,
-            'docker_credentials_json'    => { 'redacted_message' => '[PRIVATE DATA HIDDEN]' },
-            'ports'                      => nil,
+            'ports'                      => [8080],
             'space_url'                  => "/v2/spaces/#{space.guid}",
             'stack_url'                  => "/v2/stacks/#{process.stack.guid}",
             'routes_url'                 => "/v2/apps/#{process.guid}/routes",
@@ -1288,7 +1381,7 @@ RSpec.describe 'Apps' do
   end
 
   describe 'DELETE /v2/apps/:guid/routes/:guid' do
-    let!(:process) { VCAP::CloudController::AppFactory.make(space: space) }
+    let!(:process) { VCAP::CloudController::ProcessModelFactory.make(space: space) }
     let!(:route1) { VCAP::CloudController::Route.make(space: space, host: 'youdontknowme') }
     let!(:route2) { VCAP::CloudController::Route.make(space: space, host: 'andyouneverwill') }
     let!(:route_mapping1) { VCAP::CloudController::RouteMappingModel.make(app: process.app, process_type: process.type, route: route1) }
@@ -1307,7 +1400,7 @@ RSpec.describe 'Apps' do
   end
 
   describe 'GET /v2/apps/:guid/route_mappings' do
-    let!(:process) { VCAP::CloudController::AppFactory.make(space: space) }
+    let!(:process) { VCAP::CloudController::ProcessModelFactory.make(space: space) }
     let!(:route) { VCAP::CloudController::Route.make(space: space) }
     let!(:route_mapping) { VCAP::CloudController::RouteMappingModel.make(app: process.app, process_type: process.type, route: route) }
 
@@ -1345,7 +1438,7 @@ RSpec.describe 'Apps' do
   end
 
   describe 'PUT /v2/apps/:guid/droplet/upload' do
-    let(:process) { VCAP::CloudController::AppFactory.make(space: space) }
+    let(:process) { VCAP::CloudController::ProcessModelFactory.make(space: space) }
     let(:tmpdir) { Dir.mktmpdir }
     let(:valid_zip) do
       zip_name = File.join(tmpdir, 'file.zip')
@@ -1356,10 +1449,7 @@ RSpec.describe 'Apps' do
 
     before do
       TestConfig.config[:nginx][:use_nginx] = false
-    end
-
-    after do
-      TestConfig.config[:nginx][:use_nginx] = true
+      TestConfig.config[:directories][:tmpdir] = File.dirname(valid_zip.path)
     end
 
     it 'uploads the application bits' do
@@ -1395,7 +1485,7 @@ RSpec.describe 'Apps' do
   end
 
   describe 'GET /v2/apps/:guid/permissions' do
-    let(:process) { VCAP::CloudController::AppFactory.make(space: space) }
+    let(:process) { VCAP::CloudController::ProcessModelFactory.make(space: space) }
 
     context 'when the scope is cloud_controller.read' do
       it 'shows permissions' do

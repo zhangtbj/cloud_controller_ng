@@ -5,7 +5,7 @@ module VCAP::CloudController
   RSpec.describe SetCurrentDroplet do
     subject(:set_current_droplet) { SetCurrentDroplet.new(user_audit_info) }
 
-    let(:app_model) { AppModel.make desired_state: App::STOPPED }
+    let(:app_model) { AppModel.make desired_state: ProcessModel::STOPPED }
     let(:user) { double(:user, guid: '1337') }
     let(:user_email) { 'cool_dude@hoopy_frood.com' }
     let(:user_audit_info) { UserAuditInfo.new(user_guid: user.guid, user_email: user_email) }
@@ -55,7 +55,7 @@ module VCAP::CloudController
       describe 'error cases' do
         context 'when the app is not stopped' do
           it 'raises an error' do
-            app_model.update(desired_state: App::STARTED)
+            app_model.update(desired_state: ProcessModel::STARTED)
             expect {
               set_current_droplet.update_to(app_model, droplet)
             }.to raise_error SetCurrentDroplet::Error, 'Stop the app before changing droplet'
@@ -64,7 +64,7 @@ module VCAP::CloudController
 
         context 'when the droplet is not associated with the application' do
           it 'raises an error' do
-            other_droplet = DropletModel.make(:staged)
+            other_droplet = DropletModel.make
             expect {
               set_current_droplet.update_to(app_model, other_droplet)
             }.to raise_error SetCurrentDroplet::Error, 'Unable to assign current droplet. Ensure the droplet exists and belongs to this app.'

@@ -4,7 +4,8 @@ require 'cloud_controller/diego/bbs_stager_client'
 module VCAP::CloudController
   module Diego
     RSpec.describe Messenger do
-      subject(:messenger) { Messenger.new }
+      subject(:messenger) { Messenger.new(statsd_updater) }
+      let(:statsd_updater) { instance_double(VCAP::CloudController::Metrics::StatsdUpdater) }
 
       let(:stager_client) { instance_double(StagerClient) }
       let(:nsync_client) { instance_double(NsyncClient) }
@@ -29,7 +30,7 @@ module VCAP::CloudController
         let(:staging_details) do
           VCAP::CloudController::Diego::StagingDetails.new.tap do |sd|
             sd.package = package
-            sd.droplet = droplet
+            sd.staging_guid = staging_guid
           end
         end
 
@@ -51,6 +52,12 @@ module VCAP::CloudController
             staging_details.lifecycle = instance_double(BuildpackLifecycle, type: Lifecycles::BUILDPACK)
             allow(task_recipe_builder).to receive(:build_staging_task).and_return(message)
             allow(bbs_stager_client).to receive(:stage)
+            allow(statsd_updater).to receive(:start_staging_request_received)
+          end
+
+          it 'emits the `cc.staging.requested` metric' do
+            expect(statsd_updater).to receive(:start_staging_request_received)
+            messenger.send_stage_request(config, staging_details)
           end
 
           it 'sends the staging message to the bbs' do
@@ -63,7 +70,7 @@ module VCAP::CloudController
       end
 
       describe '#send_desire_request' do
-        let(:process) { App.new }
+        let(:process) { ProcessModel.new }
         let(:default_health_check_timeout) { 99 }
         let(:process_guid) { ProcessGuid.from_process(process) }
         let(:message) { { desire: 'message' } }
@@ -117,7 +124,7 @@ module VCAP::CloudController
       end
 
       describe '#send_stop_index_request' do
-        let(:process) { App.new }
+        let(:process) { ProcessModel.new }
         let(:process_guid) { ProcessGuid.from_process(process) }
         let(:index) { 3 }
 
@@ -148,7 +155,7 @@ module VCAP::CloudController
       end
 
       describe '#send_stop_app_request' do
-        let(:process) { App.new }
+        let(:process) { ProcessModel.new }
         let(:process_guid) { ProcessGuid.from_process(process) }
 
         before do

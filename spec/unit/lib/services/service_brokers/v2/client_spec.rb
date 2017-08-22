@@ -136,7 +136,12 @@ module VCAP::Services::ServiceBrokers::V2
           service_id:        instance.service.broker_provided_id,
           plan_id:           instance.service_plan.broker_provided_id,
           organization_guid: instance.organization.guid,
-          space_guid:        instance.space.guid
+          space_guid:        instance.space.guid,
+          context: {
+            platform: 'cloudfoundry',
+            organization_guid: instance.organization.guid,
+            space_guid: instance.space_guid
+          }
         )
       end
 
@@ -505,6 +510,20 @@ module VCAP::Services::ServiceBrokers::V2
         )
       end
 
+      it 'makes a patch request with the correct context in the body' do
+        client.update(instance, new_plan, previous_values: { plan_id: '1234' })
+
+        expect(http_client).to have_received(:patch).with(anything,
+          hash_including({
+            context: {
+              platform: 'cloudfoundry',
+              organization_guid: instance.organization.guid,
+              space_guid: instance.space_guid
+            }
+          })
+        )
+      end
+
       it 'makes a patch request to the correct path' do
         client.update(instance, new_plan)
         expect(http_client).to have_received(:patch).with(path, anything)
@@ -792,7 +811,7 @@ module VCAP::Services::ServiceBrokers::V2
 
       it 'sets the credentials on the key' do
         attributes = client.create_service_key(key)
-        key.set_all(attributes)
+        key.set(attributes)
         key.save
 
         expect(key.credentials).to eq({
@@ -924,7 +943,7 @@ module VCAP::Services::ServiceBrokers::V2
       it 'sets the credentials on the binding' do
         attributes = client.bind(binding, arbitrary_parameters)
         # ensure attributes return match ones for the database
-        binding.set_all(attributes)
+        binding.set(attributes)
         binding.save
 
         expect(binding.credentials).to eq({
@@ -979,7 +998,7 @@ module VCAP::Services::ServiceBrokers::V2
         it 'sets the syslog_drain_url on the binding' do
           attributes = client.bind(binding, arbitrary_parameters)
           # ensure attributes return match ones for the database
-          binding.set_all(attributes)
+          binding.set(attributes)
           binding.save
 
           expect(binding.syslog_drain_url).to eq('syslog://example.com:514')
@@ -1030,7 +1049,7 @@ module VCAP::Services::ServiceBrokers::V2
         it 'stores the volume mount on the service binding' do
           attributes = client.bind(binding, arbitrary_parameters)
 
-          binding.set_all(attributes)
+          binding.set(attributes)
           binding.save
 
           expect(binding.volume_mounts).to match_array([

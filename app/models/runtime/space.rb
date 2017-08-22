@@ -1,3 +1,5 @@
+require 'models/helpers/process_types'
+
 module VCAP::CloudController
   class Space < Sequel::Model
     class InvalidDeveloperRelation < CloudController::Errors::InvalidRelation; end
@@ -22,12 +24,12 @@ module VCAP::CloudController
 
     one_to_many :app_models, primary_key: :guid, key: :space_guid
 
-    one_to_many :processes, class: 'VCAP::CloudController::App', dataset: -> { App.filter(app: app_models) }
+    one_to_many :processes, class: 'VCAP::CloudController::ProcessModel', dataset: -> { ProcessModel.filter(app: app_models) }
 
     many_through_many :apps, [
       [:spaces, :id, :guid],
       [:apps, :space_guid, :guid]
-    ], class: 'VCAP::CloudController::App', right_primary_key: :app_guid, conditions: { type: 'web' }
+    ], class: 'VCAP::CloudController::ProcessModel', right_primary_key: :app_guid, conditions: { type: ProcessTypes::WEB }
 
     one_to_many :events, primary_key: :guid, key: :space_guid
     one_to_many :service_instances
@@ -39,7 +41,7 @@ module VCAP::CloudController
     many_to_many :security_groups,
     dataset: -> {
       SecurityGroup.left_join(:security_groups_spaces, security_group_id: :id).
-        where(Sequel.or(security_groups_spaces__space_id: id, security_groups__running_default: true))
+        where(Sequel.or(security_groups_spaces__space_id: id, security_groups__running_default: true)).distinct(:id)
     },
     eager_loader: ->(spaces_map) {
       space_ids = spaces_map[:id_map].keys
@@ -66,7 +68,7 @@ module VCAP::CloudController
     right_key: :staging_security_group_id,
     dataset: -> {
       SecurityGroup.left_join(:staging_security_groups_spaces, staging_security_group_id: :id).
-        where(Sequel.or(staging_security_groups_spaces__staging_space_id: id, security_groups__staging_default: true))
+        where(Sequel.or(staging_security_groups_spaces__staging_space_id: id, security_groups__staging_default: true)).distinct(:id)
     },
     eager_loader: ->(spaces_map) {
       space_ids = spaces_map[:id_map].keys

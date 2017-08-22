@@ -18,6 +18,7 @@ module VCAP::CloudController
         let(:user) { 'user' }
         let(:password) { 'password' }
         let(:internal_service_hostname) { 'internal_service_hostname' }
+        let(:external_port) { 8081 }
         let(:tls_port) { 8080 }
         let(:config) do
           {
@@ -26,6 +27,7 @@ module VCAP::CloudController
               auth_password: password,
             },
             internal_service_hostname: internal_service_hostname,
+            external_port:             external_port,
             tls_port:             tls_port,
             default_app_disk_in_mb:    1024,
           }
@@ -67,7 +69,7 @@ module VCAP::CloudController
               'droplet_hash'        => 'some_hash',
               'lifecycle'           => Lifecycles::BUILDPACK,
               'command'             => 'be rake my panda',
-              'completion_callback' => "https://#{internal_service_hostname}:#{tls_port}/internal/v4/tasks/#{task.guid}/completed",
+              'completion_callback' => "http://#{user}:#{password}@#{internal_service_hostname}:#{external_port}/internal/v3/tasks/#{task.guid}/completed",
               'log_source'          => 'APP/TASK/' + task.name,
               'volume_mounts'       => an_instance_of(Array)
             })
@@ -160,7 +162,12 @@ module VCAP::CloudController
 
         context 'the task has a docker file droplet' do
           let(:app) { AppModel.make(:docker) }
-          let(:droplet) { DropletModel.make(:docker, app: app, environment_variables: { 'foo' => 'bar' }, docker_receipt_image: 'cloudfoundry/capi-docker') }
+          let(:droplet) do
+            DropletModel.make(:docker,
+                              app: app,
+                              docker_receipt_image: 'cloudfoundry/capi-docker',
+                             )
+          end
 
           before do
             allow(egress_rules).to receive(:running).with(app).and_return(['running_egress_rule'])
@@ -179,10 +186,30 @@ module VCAP::CloudController
               'docker_path'         => 'cloudfoundry/capi-docker',
               'lifecycle'           => Lifecycles::DOCKER,
               'command'             => 'be rake my panda',
-              'completion_callback' => "https://#{internal_service_hostname}:#{tls_port}/internal/v4/tasks/#{task.guid}/completed",
+              'completion_callback' => "http://#{user}:#{password}@#{internal_service_hostname}:#{external_port}/internal/v3/tasks/#{task.guid}/completed",
               'log_source'          => 'APP/TASK/' + task.name,
               'volume_mounts'       => an_instance_of(Array)
             })
+          end
+
+          context 'the droplet contains docker credentials' do
+            let(:droplet) do
+              DropletModel.make(:docker,
+                                app: app,
+                                docker_receipt_image: 'cloudfoundry/capi-docker',
+                                docker_receipt_username: 'dockerusername',
+                                docker_receipt_password: 'dockerpassword',
+                               )
+            end
+
+            it 'contains the credentials in the task request' do
+              result = protocol.task_request(task, config)
+
+              expect(JSON.parse(result)).to include({
+                'docker_user'     => 'dockerusername',
+                'docker_password' => 'dockerpassword',
+              })
+            end
           end
         end
       end

@@ -6,7 +6,11 @@ module VCAP::CloudController
     FREQUENT_FUDGE_FACTOR = 1.second.freeze
     DAILY_FUDGE_FACTOR    = 1.minute.freeze
 
-    def schedule_daily_job(name:, at:)
+    HIGH_PRIORITY   = 0
+    MEDIUM_PRIORITY = 1
+    LOW_PRIORITY    = 100
+
+    def schedule_daily_job(name:, at:, priority:)
       job_opts = {
         name:     name,
         interval: 1.day,
@@ -16,7 +20,7 @@ module VCAP::CloudController
 
       schedule_job(job_opts) do
         job = yield
-        Jobs::Enqueuer.new(job, queue: 'cc-generic').enqueue
+        Jobs::Enqueuer.new(job, queue: 'cc-generic', priority: priority).enqueue
       end
     end
 

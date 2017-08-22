@@ -1,4 +1,3 @@
-require 'cloud_controller/procfile'
 require 'actions/process_create'
 
 module VCAP::CloudController
@@ -24,8 +23,6 @@ module VCAP::CloudController
     end
 
     private
-
-    attr_reader :user_guid, :user_email
 
     def evaluate_processes(app, process_types)
       types = []

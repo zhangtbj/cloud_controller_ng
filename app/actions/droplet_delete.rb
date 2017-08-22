@@ -2,9 +2,8 @@ require 'repositories/droplet_event_repository'
 
 module VCAP::CloudController
   class DropletDelete
-    def initialize(user_audit_info, stagers)
+    def initialize(user_audit_info)
       @user_audit_info = user_audit_info
-      @stagers = stagers
     end
 
     def delete(droplets)
@@ -24,20 +23,13 @@ module VCAP::CloudController
           droplet.app.space.organization_guid
         )
 
-        fire_and_forget_staging_cancel(droplet)
-
         droplet.destroy
       end
+
+      []
     end
 
     private
-
-    def fire_and_forget_staging_cancel(droplet)
-      return if droplet.in_final_state?
-      @stagers.stager_for_app(droplet.app).stop_stage(droplet.guid)
-    rescue => e
-      logger.error("failed to request staging cancelation for droplet: #{droplet.guid}, error: #{e.message}")
-    end
 
     def logger
       @logger ||= Steno.logger('cc.droplet_delete')

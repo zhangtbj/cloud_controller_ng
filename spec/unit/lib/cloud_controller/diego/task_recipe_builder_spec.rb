@@ -9,15 +9,26 @@ module VCAP::CloudController
         let(:app) { AppModel.make(guid: 'banana-guid') }
         let(:staging_details) do
           Diego::StagingDetails.new.tap do |details|
-            details.droplet = droplet
+            details.staging_guid = droplet.guid
             details.package = package
             details.environment_variables = [::Diego::Bbs::Models::EnvironmentVariable.new(name: 'nightshade_fruit', value: 'potato')]
             details.staging_memory_in_mb  = 42
             details.staging_disk_in_mb    = 51
             details.start_after_staging   = true
+            details.lifecycle             = lifecycle
             details.isolation_segment     = isolation_segment
           end
         end
+        let(:lifecycle) do
+          LifecycleProvider.provide(package, staging_message)
+        end
+        let(:staging_message) { BuildCreateMessage.new(lifecycle: { data: request_data, type: lifecycle_type }) }
+        let(:request_data) do
+          {
+            stack:     'cool-stack'
+          }
+        end
+        let(:package) { PackageModel.make(app: app) }
         let(:config) do
           {
             tls_port: tls_port,
@@ -69,17 +80,22 @@ module VCAP::CloudController
             organizational_unit: ["app:#{app.guid}"],
           )
         end
+        let(:lifecycle_protocol) do
+          instance_double(VCAP::CloudController::Diego::Buildpack::LifecycleProtocol,
+            staging_action_builder: lifecycle_action_builder
+          )
+        end
 
         before do
           SecurityGroup.make(rules: [{ 'protocol' => 'udp', 'ports' => '53', 'destination' => '0.0.0.0/0' }], staging_default: true)
           SecurityGroup.make(rules: [{ 'protocol' => 'tcp', 'ports' => '80', 'destination' => '0.0.0.0/0', 'log' => true }], staging_default: true)
           security_group = SecurityGroup.make(rules: [{ 'protocol' => 'tcp', 'ports' => '443', 'destination' => '0.0.0.0/0', 'log' => true }], staging_default: false)
           security_group.add_staging_space(app.space)
+          allow(LifecycleProtocol).to receive(:protocol_for_type).with(lifecycle_type).and_return(lifecycle_protocol)
         end
 
         context 'with a buildpack backend' do
           let(:droplet) { DropletModel.make(:buildpack, package: package, app: app) }
-          let(:package) { PackageModel.make(app: app) }
 
           let(:buildpack_staging_action) { ::Diego::Bbs::Models::RunAction.new }
           let(:lifecycle_environment_variables) { [::Diego::Bbs::Models::EnvironmentVariable.new(name: 'the-buildpack-env-var', value: 'the-buildpack-value')] }
@@ -95,15 +111,6 @@ module VCAP::CloudController
           end
 
           let(:lifecycle_type) { 'buildpack' }
-          let(:lifecycle_protocol) do
-            instance_double(VCAP::CloudController::Diego::Buildpack::LifecycleProtocol,
-              staging_action_builder: lifecycle_action_builder
-            )
-          end
-
-          before do
-            allow(LifecycleProtocol).to receive(:protocol_for_type).with(lifecycle_type).and_return(lifecycle_protocol)
-          end
 
           it 'constructs a TaskDefinition with staging instructions' do
             result = task_recipe_builder.build_staging_task(config, staging_details)
@@ -121,7 +128,7 @@ module VCAP::CloudController
             expect(result.legacy_download_user).to eq('vcap')
 
             expect(result.completion_callback_url).to eq("https://#{user}:#{password}@#{internal_service_hostname}:#{tls_port}" \
-                                   "/internal/v3/staging/#{droplet.guid}/droplet_completed?start=#{staging_details.start_after_staging}")
+                                   "/internal/v3/staging/#{droplet.guid}/build_completed?start=#{staging_details.start_after_staging}")
 
             timeout_action = result.action.timeout_action
             expect(timeout_action).not_to be_nil
@@ -164,7 +171,13 @@ module VCAP::CloudController
 
         context 'with a docker backend' do
           let(:droplet) { DropletModel.make(:docker, package: package, app: app) }
-          let(:package) { PackageModel.make(:docker, app: app) }
+          let(:package) do
+            PackageModel.make(:docker,
+                              app: app,
+                              docker_username: 'dockeruser',
+                              docker_password: 'dockerpass',
+                             )
+          end
 
           let(:docker_staging_action) { ::Diego::Bbs::Models::RunAction.new }
           let(:lifecycle_type) { 'docker' }
@@ -242,7 +255,7 @@ module VCAP::CloudController
           it 'sets the completion callback' do
             result = task_recipe_builder.build_staging_task(config, staging_details)
             expect(result.completion_callback_url).to eq("https://#{user}:#{password}@#{internal_service_hostname}:#{tls_port}" \
-                                   "/internal/v3/staging/#{droplet.guid}/droplet_completed?start=#{staging_details.start_after_staging}")
+                                   "/internal/v3/staging/#{droplet.guid}/build_completed?start=#{staging_details.start_after_staging}")
           end
 
           it 'sets the trusted cert path' do
@@ -276,6 +289,12 @@ module VCAP::CloudController
             result = task_recipe_builder.build_staging_task(config, staging_details)
             expect(result.certificate_properties).to eq(certificate_properties)
           end
+
+          it 'sets the docker credentials' do
+            result = task_recipe_builder.build_staging_task(config, staging_details)
+            expect(result.image_username).to eq('dockeruser')
+            expect(result.image_password).to eq('dockerpass')
+          end
         end
       end
 
@@ -293,8 +312,21 @@ module VCAP::CloudController
             sequence_id: 9
           )
         end
+
+        let(:expected_network) do
+          ::Diego::Bbs::Models::Network.new(
+            properties: [
+              ::Diego::Bbs::Models::Network::PropertiesEntry.new(key: 'policy_group_id', value: app.guid),
+              ::Diego::Bbs::Models::Network::PropertiesEntry.new(key: 'app_id', value: app.guid),
+              ::Diego::Bbs::Models::Network::PropertiesEntry.new(key: 'space_id', value: app.space.guid),
+              ::Diego::Bbs::Models::Network::PropertiesEntry.new(key: 'org_id', value: app.organization.guid),
+            ]
+          )
+        end
+
         let(:config) do
           {
+            external_port: external_port,
             tls_port: tls_port,
             internal_service_hostname: internal_service_hostname,
             internal_api: {
@@ -311,6 +343,7 @@ module VCAP::CloudController
         end
         let(:isolation_segment) { 'potato-segment' }
         let(:internal_service_hostname) { 'internal.awesome.sauce' }
+        let(:external_port) { '7772' }
         let(:tls_port) { '7777' }
         let(:user) { 'user' }
         let(:password) { 'password' }
@@ -387,7 +420,7 @@ module VCAP::CloudController
 
           it 'constructs a TaskDefinition with app task instructions' do
             result = task_recipe_builder.build_app_task(config, task)
-            expected_callback_url = "https://#{internal_service_hostname}:#{tls_port}/internal/v4/tasks/#{task.guid}/completed"
+            expected_callback_url = "http://#{user}:#{password}@#{internal_service_hostname}:#{external_port}/internal/v3/tasks/#{task.guid}/completed"
 
             expect(result.log_guid).to eq(app.guid)
             expect(result.memory_mb).to eq(2048)
@@ -395,6 +428,7 @@ module VCAP::CloudController
             expect(result.environment_variables).to eq(lifecycle_environment_variables)
             expect(result.root_fs).to eq('preloaded:potato-stack')
             expect(result.completion_callback_url).to eq(expected_callback_url)
+            expect(result.network). to eq(expected_network)
             expect(result.privileged).to be(false)
             expect(result.volume_mounts).to eq([])
             expect(result.egress_rules).to eq([
@@ -495,7 +529,13 @@ module VCAP::CloudController
 
         context 'with a docker backend' do
           let(:package) { PackageModel.make(:docker, app: app) }
-          let(:droplet) { DropletModel.make(:docker, app: app) }
+          let(:droplet) do
+            DropletModel.make(:docker,
+                              app: app,
+                              docker_receipt_username: 'dockerusername',
+                              docker_receipt_password: 'dockerpassword',
+                             )
+          end
 
           let(:task_action_builder) do
             instance_double(
@@ -521,7 +561,7 @@ module VCAP::CloudController
 
           it 'constructs a TaskDefinition with app task instructions' do
             result = task_recipe_builder.build_app_task(config, task)
-            expected_callback_url = "https://#{internal_service_hostname}:#{tls_port}/internal/v4/tasks/#{task.guid}/completed"
+            expected_callback_url = "http://#{user}:#{password}@#{internal_service_hostname}:#{external_port}/internal/v3/tasks/#{task.guid}/completed"
 
             expect(result.disk_mb).to eq(1024)
             expect(result.memory_mb).to eq(2048)
@@ -537,6 +577,7 @@ module VCAP::CloudController
             expect(result.trusted_system_certificates_path).to eq('/etc/cf-system-certificates')
             expect(result.volume_mounts).to eq([])
             expect(result.environment_variables).to eq(lifecycle_environment_variables)
+            expect(result.network).to eq(expected_network)
 
             expect(result.root_fs).to eq('docker://potato-stack')
             expect(result.cached_dependencies).to eq(lifecycle_cached_dependencies)
@@ -547,6 +588,9 @@ module VCAP::CloudController
             expect(result.PlacementTags).to eq([isolation_segment])
             expect(result.max_pids).to eq(100)
             expect(result.certificate_properties).to eq(certificate_properties)
+
+            expect(result.image_username).to eq('dockerusername')
+            expect(result.image_password).to eq('dockerpassword')
           end
 
           context 'when a volume mount is provided' do

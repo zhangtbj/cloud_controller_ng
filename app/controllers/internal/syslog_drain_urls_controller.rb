@@ -4,7 +4,9 @@ module VCAP::CloudController
     allow_unauthenticated_access
 
     get '/internal/v4/syslog_drain_urls', :list
+
     def list
+      prepare_aggregate_function
       guid_to_drain_maps = if Sequel::Model.db.database_type == :mssql
                              Sequel::Model.db.fetch("SET ANSI_NULLS, QUOTED_IDENTIFIER, CONCAT_NULL_YIELDS_NULL, ANSI_WARNINGS, ANSI_PADDING ON; SELECT
                                                          [APPS].[GUID],
@@ -25,11 +27,11 @@ module VCAP::CloudController
                                                      ORDER BY [GUID] OFFSET #{last_id} ROWS FETCH NEXT #{batch_size} ROWS ONLY")
                            else
                              AppModel.
-                               join(ServiceBinding, app_guid: :guid).
-                               join(Space, guid: :apps__space_guid).
-                               join(Organization, id: :spaces__organization_id).
-                               where('syslog_drain_url IS NOT NULL').
-                               where("syslog_drain_url != ''").
+                               join(ServiceBinding.table_name, app_guid: :guid).
+                               join(Space.table_name, guid: :apps__space_guid).
+                               join(Organization.table_name, id: :spaces__organization_id).
+                               where(Sequel.lit('syslog_drain_url IS NOT NULL')).
+                               where(Sequel.lit("syslog_drain_url != ''")).
                                group(
                                  "#{AppModel.table_name}__guid".to_sym,
                                "#{AppModel.table_name}__name".to_sym,
@@ -49,11 +51,11 @@ module VCAP::CloudController
                                all
                            end
       next_page_token = nil
-      drain_urls      = {}
+      drain_urls = {}
 
       guid_to_drain_maps.each do |guid_and_drains|
         drain_urls[guid_and_drains[:guid]] = {
-          drains:   guid_and_drains[:syslog_drain_urls].split(','),
+          drains: guid_and_drains[:syslog_drain_urls].split(','),
           hostname: hostname_from_app_name(guid_and_drains[:organization_name], guid_and_drains[:space_name], guid_and_drains[:name])
         }
       end
@@ -78,6 +80,12 @@ module VCAP::CloudController
         Sequel.function(:group_concat, column)
       else
         raise 'Unknown database type'
+      end
+    end
+
+    def prepare_aggregate_function
+      if AppModel.db.database_type == :mysql
+        AppModel.db.run('SET SESSION group_concat_max_len = 1000000000')
       end
     end
 

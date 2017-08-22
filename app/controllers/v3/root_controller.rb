@@ -26,6 +26,12 @@ class RootController < ActionController::Base
           },
           spaces: {
             href: build_api_uri(path: '/spaces')
+          },
+          processes: {
+            href: build_api_uri(path: '/processes')
+          },
+          droplets: {
+            href: build_api_uri(path: '/droplets')
           }
         }
       }, pretty: true)

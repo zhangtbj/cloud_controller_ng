@@ -18,6 +18,8 @@ module VCAP::CloudController
 
         lifecycle.create_lifecycle_data_model(app)
 
+        raise CloudController::Errors::ApiError.new_from_details('CustomBuildpacksDisabled') if using_disabled_custom_buildpack?(app)
+
         Repositories::AppEventRepository.new.record_app_create(
           app,
           app.space,
@@ -29,6 +31,16 @@ module VCAP::CloudController
       app
     rescue Sequel::ValidationFailed => e
       raise InvalidApp.new(e.message)
+    end
+
+    private
+
+    def using_disabled_custom_buildpack?(app)
+      app.lifecycle_data.using_custom_buildpack? && custom_buildpacks_disabled?
+    end
+
+    def custom_buildpacks_disabled?
+      VCAP::CloudController::Config.config[:disable_custom_buildpacks]
     end
   end
 end

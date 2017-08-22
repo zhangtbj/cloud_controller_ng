@@ -1,6 +1,4 @@
 Sequel.migration do
-  transaction
-
   up do
     collate_opts = {}
     dbtype = if self.class.name =~ /mysql/i
@@ -17,8 +15,9 @@ Sequel.migration do
     ####
     ##  App usage events - Insert STOP events for v3 created processes that will be removed
     ####
-    if Sequel::Model.db.database_type == :mssql
-      generate_stop_events_query = <<-SQL
+    transaction do
+      if Sequel::Model.db.database_type == :mssql
+        generate_stop_events_query = <<-SQL
       INSERT INTO APP_USAGE_EVENTS
         (GUID, CREATED_AT, INSTANCE_COUNT, MEMORY_IN_MB_PER_INSTANCE, STATE, APP_GUID, APP_NAME, SPACE_GUID, SPACE_NAME, ORG_GUID, BUILDPACK_GUID, BUILDPACK_NAME, PACKAGE_STATE, PARENT_APP_NAME, PARENT_APP_GUID, PROCESS_TYPE, TASK_GUID, TASK_NAME, PACKAGE_GUID, PREVIOUS_STATE, PREVIOUS_PACKAGE_STATE, PREVIOUS_MEMORY_IN_MB_PER_INSTANCE, PREVIOUS_INSTANCE_COUNT)
       SELECT %s, %s(), P.INSTANCES, P.MEMORY, 'STOPPED', P.GUID, P.NAME, S.GUID, S.NAME, O.GUID, D.BUILDPACK_RECEIPT_BUILDPACK_GUID, D.BUILDPACK_RECEIPT_BUILDPACK, P.PACKAGE_STATE, A.NAME, A.GUID, P.TYPE, NULL, NULL, PKG.GUID, 'STARTED', P.PACKAGE_STATE, P.MEMORY, P.INSTANCES
@@ -30,9 +29,9 @@ Sequel.migration do
           INNER JOIN V3_DROPLETS AS D ON (A.GUID=D.APP_GUID)
           INNER JOIN BUILDPACK_LIFECYCLE_DATA AS L ON (D.GUID=L.DROPLET_GUID)
         WHERE P.STATE='STARTED'
-      SQL
-    else
-      generate_stop_events_query = <<-SQL
+        SQL
+      else
+        generate_stop_events_query = <<-SQL
       INSERT INTO app_usage_events
         (guid, created_at, instance_count, memory_in_mb_per_instance, state, app_guid, app_name, space_guid, space_name, org_guid, buildpack_guid, buildpack_name, package_state, parent_app_name, parent_app_guid, process_type, task_guid, task_name, package_guid, previous_state, previous_package_state, previous_memory_in_mb_per_instance, previous_instance_count)
       SELECT %s, %s(), p.instances, p.memory, 'STOPPED', p.guid, p.name, s.guid, s.name, o.guid, d.buildpack_receipt_buildpack_guid, d.buildpack_receipt_buildpack, p.package_state, a.name, a.guid, p.type, NULL, NULL, pkg.guid, 'STARTED', p.package_state, p.memory, p.instances
@@ -44,15 +43,16 @@ Sequel.migration do
           INNER JOIN v3_droplets as d ON (a.guid=d.app_guid)
           INNER JOIN buildpack_lifecycle_data as l ON (d.guid=l.droplet_guid)
         WHERE p.state='STARTED'
-      SQL
-    end
+        SQL
+      end
 
-    if dbtype == 'mysql'
-      run sprintf(generate_stop_events_query, 'UUID()', 'now')
-    elsif dbtype == 'postgres'
-      run sprintf(generate_stop_events_query, 'get_uuid()', 'now')
-    elsif dbtype == 'mssql'
-      run sprintf(generate_stop_events_query, 'NEWID()', 'GETDATE')
+      if dbtype == 'mysql'
+        run sprintf(generate_stop_events_query, 'UUID()', 'now')
+      elsif dbtype == 'postgres'
+        run sprintf(generate_stop_events_query, 'get_uuid()', 'now')
+      elsif dbtype == 'mssql'
+        run sprintf(generate_stop_events_query, 'NEWID()', 'GETDATE')
+      end
     end
 
     ###
@@ -75,16 +75,17 @@ Sequel.migration do
     drop_table(:v3_droplets)
     drop_table(:route_mappings)
 
-    if Sequel::Model.db.database_type == :mssql
-      run 'DELETE FROM DROPLETS WHERE APP_ID IN (SELECT ID FROM APPS WHERE APP_GUID IS NOT NULL);'
-      run 'DELETE FROM APPS_ROUTES WHERE APP_ID IN (SELECT ID FROM APPS WHERE APP_GUID IS NOT NULL);'
-      run 'DELETE FROM APPS WHERE APP_GUID IS NOT NULL OR DELETED_AT IS NOT NULL;'
-    else
-      run 'DELETE FROM droplets WHERE app_id IN (SELECT id FROM apps WHERE app_guid IS NOT NULL);'
-      run 'DELETE FROM apps_routes WHERE app_id IN (SELECT id FROM apps WHERE app_guid IS NOT NULL);'
-      run 'DELETE FROM apps WHERE app_guid IS NOT NULL OR deleted_at IS NOT NULL;'
+    transaction do
+      if Sequel::Model.db.database_type == :mssql
+        run 'DELETE FROM DROPLETS WHERE APP_ID IN (SELECT ID FROM APPS WHERE APP_GUID IS NOT NULL);'
+        run 'DELETE FROM APPS_ROUTES WHERE APP_ID IN (SELECT ID FROM APPS WHERE APP_GUID IS NOT NULL);'
+        run 'DELETE FROM APPS WHERE APP_GUID IS NOT NULL OR DELETED_AT IS NOT NULL;'
+      else
+        run 'DELETE FROM droplets WHERE app_id IN (SELECT id FROM apps WHERE app_guid IS NOT NULL);'
+        run 'DELETE FROM apps_routes WHERE app_id IN (SELECT id FROM apps WHERE app_guid IS NOT NULL);'
+        run 'DELETE FROM apps WHERE app_guid IS NOT NULL OR deleted_at IS NOT NULL;'
+      end
     end
-
     self[:packages].truncate
     self[:buildpack_lifecycle_data].truncate
     self[:apps_v3].truncate
@@ -569,6 +570,24 @@ Sequel.migration do
       ####
       ## Migrate service bindings
       ####
+
+      # Remove duplicate apps_routes to prepare for adding a uniqueness constraint
+      dup_groups = self[:apps_routes].
+        select(:app_guid, :route_guid, :app_port, :process_type).
+        group_by(:app_guid, :route_guid, :app_port, :process_type).
+        having { count.function.* > 1 }
+
+      dup_groups.each do |group|
+        sorted_ids = self[:apps_routes].
+          select(:id).
+          where(app_guid: group[:app_guid], route_guid: group[:route_guid], app_port: group[:app_port], process_type: group[:process_type]).
+          map(&:values).
+          flatten.
+          sort
+        sorted_ids.shift
+        ids_to_remove = sorted_ids
+        self[:apps_routes].where(id: ids_to_remove).delete
+      end
 
       if Sequel::Model.db.database_type != :mssql
         run <<-SQL

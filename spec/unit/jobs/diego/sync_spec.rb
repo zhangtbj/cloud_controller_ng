@@ -18,8 +18,8 @@ module VCAP::CloudController
 
         before do
           allow(CloudController::DependencyLocator.instance).to receive(:config).and_return(config)
-          allow(Diego::ProcessesSync).to receive(:new).with(config).and_return(processes_sync)
-          allow(Diego::TasksSync).to receive(:new).with(config).and_return(tasks_sync)
+          allow(Diego::ProcessesSync).to receive(:new).with(config: config).and_return(processes_sync)
+          allow(Diego::TasksSync).to receive(:new).with(config: config).and_return(tasks_sync)
 
           allow(processes_sync).to receive(:sync)
           allow(tasks_sync).to receive(:sync)
@@ -53,6 +53,23 @@ module VCAP::CloudController
             job.perform
             expect(tasks_sync).not_to have_received(:sync)
           end
+        end
+
+        it 'records sync duration' do
+          yielded_block = nil
+
+          allow_any_instance_of(Statsd).to receive(:time) do |_, metric_name, &block|
+            expect(metric_name).to eq 'cc.diego_sync.duration'
+            yielded_block = block
+          end
+
+          job.perform
+          expect(processes_sync).to_not have_received(:sync)
+          expect(tasks_sync).to_not have_received(:sync)
+
+          yielded_block.call
+          expect(processes_sync).to have_received(:sync)
+          expect(tasks_sync).to have_received(:sync)
         end
       end
     end

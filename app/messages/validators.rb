@@ -41,6 +41,12 @@ module VCAP::CloudController::Validators
     end
   end
 
+  class UriPathValidator < ActiveModel::EachValidator
+    def validate_each(record, attribute, value)
+      record.errors.add attribute, 'must be a valid URI path' unless UriUtils.is_uri_path?(value)
+    end
+  end
+
   class EnvironmentVariablesValidator < ActiveModel::EachValidator
     extend StandaloneValidator
 
@@ -87,7 +93,10 @@ module VCAP::CloudController::Validators
 
   class RelationshipValidator < ActiveModel::Validator
     def validate(record)
-      return if !record.relationships.is_a?(Hash)
+      if !record.relationships.is_a?(Hash)
+        record.errors[:relationships].concat ["'relationships' is not a hash"]
+        return
+      end
 
       rel = record.relationships_message
 
@@ -110,29 +119,6 @@ module VCAP::CloudController::Validators
   end
 
   class ToOneRelationshipValidator < ActiveModel::EachValidator
-    def error_message(attribute)
-      "must be structured like this: \"#{attribute}: {\"guid\": \"valid-guid\"}\""
-    end
-
-    def validate_each(record, attribute, value)
-      if has_correct_structure?(value)
-        validate_guid(record, attribute, value)
-      else
-        record.errors.add(attribute, error_message(attribute))
-      end
-    end
-
-    def validate_guid(record, attribute, value)
-      VCAP::CloudController::BaseMessage::GuidValidator.
-        validate_each(record, "#{attribute} Guid", value.values.first)
-    end
-
-    def has_correct_structure?(value)
-      (value.is_a?(Hash) && (value.keys.map(&:to_s) == ['guid']))
-    end
-  end
-
-  class ToOneRelationship2Validator < ActiveModel::EachValidator
     def validate_each(record, attribute, relationship)
       if has_correct_structure?(relationship)
         validate_guid(record, attribute, relationship) if relationship[:data]
