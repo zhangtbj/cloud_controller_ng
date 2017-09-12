@@ -1278,7 +1278,7 @@ RSpec.describe 'Apps' do
     it 'shows the routes associated with an app' do
       get "/v2/apps/#{process.guid}/routes", nil, headers_for(user)
 
-      expect(last_response.status).to eq(200)
+      expect(last_response.status).to eq(200), last_response.body
       expect(MultiJson.load(last_response.body)).to be_a_response_like(
         {
           'total_results' => 1,

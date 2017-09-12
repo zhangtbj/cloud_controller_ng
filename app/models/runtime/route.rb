@@ -10,7 +10,7 @@ module VCAP::CloudController
 
     one_to_many :route_mappings, class: 'VCAP::CloudController::RouteMappingModel', key: :route_guid, primary_key: :guid
 
-    many_to_many :apps, class: 'VCAP::CloudController::ProcessModel',
+    many_to_many :web_processes, class: 'VCAP::CloudController::ProcessModel',
                         join_table:              RouteMappingModel.table_name,
                         left_primary_key:        :guid, left_key: :route_guid,
                         right_primary_key:       [:app_guid, :type], right_key: [:app_guid, :process_type],
@@ -139,12 +139,12 @@ module VCAP::CloudController
       !Domain.find(name: fqdn).nil?
     end
 
-    def all_apps_diego?
-      apps.all?(&:diego?)
+    def all_processes_diego?
+      web_processes.all?(&:diego?)
     end
 
     def validate_changed_space(new_space)
-      raise CloudController::Errors::InvalidAppRelation.new('Route and apps not in same space') if apps.any? { |app| app.space.id != space.id }
+      raise CloudController::Errors::InvalidAppRelation.new('Route and apps not in same space') if web_processes.any? { |process| process.space.id != space.id }
       raise InvalidOrganizationRelation.new("Organization cannot use domain #{domain.name}") if domain && !domain.usable_by_organization?(new_space.organization)
     end
 
@@ -183,11 +183,11 @@ module VCAP::CloudController
     end
 
     def around_destroy
-      loaded_apps = apps
+      loaded_processes = web_processes
       super
 
-      loaded_apps.each do |app|
-        ProcessRouteHandler.new(app).notify_backend_of_route_update
+      loaded_processes.each do |process|
+        ProcessRouteHandler.new(process).notify_backend_of_route_update
       end
     end
 

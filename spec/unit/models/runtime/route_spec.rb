@@ -83,31 +83,31 @@ module VCAP::CloudController
       it { is_expected.to have_associated :space, associated_instance: ->(route) { Space.make(organization: route.domain.owning_organization) } }
       it { is_expected.to have_associated :route_mappings, associated_instance: ->(route) { RouteMappingModel.make(app: AppModel.make(space: route.space), route: route) } }
 
-      describe 'apps association' do
+      describe 'web_processes association' do
         let(:space) { Space.make }
         let(:process) { ProcessModelFactory.make(space: space) }
         let(:route) { Route.make(space: space) }
 
-        it 'associates apps through route mappings' do
+        it 'associates processes through route mappings' do
           RouteMappingModel.make(app: process.app, route: route, process_type: process.type)
 
-          expect(route.apps).to match_array([process])
+          expect(route.web_processes).to match_array([process])
         end
 
-        it 'does not associate non-web v2 apps' do
+        it 'does not associate non-web v2 processes' do
           non_web_process = ProcessModelFactory.make(type: 'other', space: space)
 
           RouteMappingModel.make(app: process.app, route: route, process_type: process.type)
           RouteMappingModel.make(app: non_web_process.app, route: route, process_type: non_web_process.type)
 
-          expect(route.apps).to match_array([process])
+          expect(route.web_processes).to match_array([process])
         end
 
         it 'returns a single app when an app is bound to multiple ports' do
           RouteMappingModel.make(app: process.app, route: route, app_port: 8080)
           RouteMappingModel.make(app: process.app, route: route, app_port: 9090)
 
-          expect(route.apps.length).to eq(1)
+          expect(route.web_processes.length).to eq(1)
         end
       end
 
@@ -122,14 +122,14 @@ module VCAP::CloudController
       end
 
       context 'changing space' do
-        context 'apps' do
-          it 'succeeds with no mapped apps' do
+        context 'web_processes' do
+          it 'succeeds with no mapped processes' do
             route = Route.make(space: ProcessModelFactory.make.space, domain: SharedDomain.make)
 
             expect { route.space = Space.make }.not_to raise_error
           end
 
-          it 'fails when changing the space when there are apps mapped to it' do
+          it 'fails when changing the space when there are processes mapped to it' do
             process = ProcessModelFactory.make
             route = Route.make(space: process.space, domain: SharedDomain.make)
             RouteMappingModel.make(app: process.app, route: route, process_type: process.type)
@@ -1028,7 +1028,7 @@ module VCAP::CloudController
         end
       end
 
-      describe 'all_apps_diego?' do
+      describe 'all_processes_diego?' do
         let(:diego_process) { ProcessModelFactory.make(diego: true) }
         let(:route) { Route.make(space: diego_process.space, domain: SharedDomain.make) }
 
@@ -1038,7 +1038,7 @@ module VCAP::CloudController
         end
 
         it 'returns true' do
-          expect(route.all_apps_diego?).to eq(true)
+          expect(route.all_processes_diego?).to eq(true)
         end
 
         context 'when some apps are not using diego' do
@@ -1049,7 +1049,7 @@ module VCAP::CloudController
           end
 
           it 'returns false' do
-            expect(route.all_apps_diego?).to eq(false)
+            expect(route.all_processes_diego?).to eq(false)
           end
         end
       end
@@ -1077,7 +1077,7 @@ module VCAP::CloudController
     end
 
     describe '#destroy' do
-      it 'marks the apps routes as changed and sends an update to the dea' do
+      it 'marks the processes routes as changed and sends an update to the dea' do
         fake_route_handler_app1 = instance_double(ProcessRouteHandler)
         fake_route_handler_app2 = instance_double(ProcessRouteHandler)
 
@@ -1090,8 +1090,8 @@ module VCAP::CloudController
         RouteMappingModel.make(app: process2.app, route: route, process_type: process2.type)
         route.reload
 
-        process1   = route.apps[0]
-        process2   = route.apps[1]
+        process1   = route.web_processes[0]
+        process2   = route.web_processes[1]
 
         allow(ProcessRouteHandler).to receive(:new).with(process1).and_return(fake_route_handler_app1)
         allow(ProcessRouteHandler).to receive(:new).with(process2).and_return(fake_route_handler_app2)
