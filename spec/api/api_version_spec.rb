@@ -16,9 +16,9 @@ RSpec.describe 'Stable API warning system', api_version_check: true do
 
     expect(new_checksum).to eql(API_FOLDER_CHECKSUM),
       <<~END
-        You are about to make a breaking change in API!
+        You are about to make a change to the API!
 
-        Do you really want to do it? Then update the checksum (see below) & CC version.
+        Stop for a moment and consider: do you really want to do it? If so, then update the checksum (see below) & CC version.
 
         expected:
             #{API_FOLDER_CHECKSUM}
