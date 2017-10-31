@@ -1134,6 +1134,16 @@ module VCAP::CloudController
           expect(process.package_state).to eq('STAGED')
         end
       end
+
+      context 'when the app has a package but no uploaded bits' do
+        before do
+          PackageModel.make(app: parent_app, state: PackageModel::CREATED_STATE)
+        end
+
+        it 'is READY_FOR_UPLOAD' do
+          expect(process.package_state).to eq('READY_FOR_UPLOAD')
+        end
+      end
     end
 
     describe 'needs_staging?' do
