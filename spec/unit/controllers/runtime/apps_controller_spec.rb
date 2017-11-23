@@ -2305,7 +2305,7 @@ module VCAP::CloudController
         expect(last_response.status).to eql(200), last_response.body
         service_bindings = decoded_response['resources']
         expect(service_bindings.size).to eq(0)
-        
+
         get "/v2/apps/#{process1.app.guid}/service_bindings?q=name:guava"
         expect(last_response.status).to eql(200), last_response.body
         service_bindings = decoded_response['resources']
@@ -2314,7 +2314,7 @@ module VCAP::CloudController
         expect(entity['app_guid']).to eq(process1.app.guid)
         expect(entity['service_instance_guid']).to eq(managed_service_instance.guid)
         expect(entity['name']).to eq('guava')
-        
+
         [[process1, 'guava'], [process2, 'peach'], [process3, 'cilantro']].each do |process, fruit|
           get "/v2/apps/#{process.app.guid}/service_bindings?q=name:#{fruit}"
           expect(last_response.status).to eql(200)
@@ -2324,8 +2324,7 @@ module VCAP::CloudController
           expect(entity['app_guid']).to eq(process.app.guid)
           expect(entity['service_instance_guid']).to eq(managed_service_instance.guid)
           expect(entity['name']).to eq(fruit)
-        end          
-        
+        end
       end
 
       # This is why there isn't much point testing lookup by name with this endpoint --
@@ -2344,19 +2343,19 @@ module VCAP::CloudController
           ServiceBinding.make(service_instance: si2, app: process2.app, name: 'free')
         end
 
-        it "binding si2 to process1 with a name in use by process1 is not ok" do
+        it 'binding si2 to process1 with a name in use by process1 is not ok' do
           expect {
             ServiceBinding.make(service_instance: si2, app: process1.app, name: 'out')
           }.to raise_error(Sequel::ValidationFailed, /App binding names must be unique\./)
         end
 
-        it "binding si1 to process1 with a new name is not ok" do
+        it 'binding si1 to process1 with a new name is not ok' do
           expect {
             ServiceBinding.make(service_instance: si1, app: process1.app, name: 'gravy')
-          }.to raise_error(Sequel::ValidationFailed, "The app is already bound to the service.")
+          }.to raise_error(Sequel::ValidationFailed, 'The app is already bound to the service.')
         end
 
-        it "binding si2 to process1 with a name in use by process2 is ok" do
+        it 'binding si2 to process1 with a name in use by process2 is ok' do
           ServiceBinding.make(service_instance: si2, app: process1.app, name: 'free')
           get "/v2/apps/#{process1.app.guid}/service_bindings?results-per-page=2&page=1&q=name:free"
           expect(last_response.status).to eq(200), last_response.body
