@@ -59,20 +59,6 @@ RSpec.describe 'RouteMappings' do
           expect(parsed_response['entity']['app_port']).to eq(9090)
         end
       end
-
-      context 'dea app' do
-        before do
-          process.update(diego: false)
-        end
-
-        it 'displays nil for app_port' do
-          get "/v2/route_mappings/#{route_mapping.guid}", nil, headers_for(user)
-          expect(last_response.status).to eq(200)
-
-          parsed_response = MultiJson.load(last_response.body)
-          expect(parsed_response['entity']['app_port']).to be_nil
-        end
-      end
     end
   end
 
