@@ -1,6 +1,10 @@
 Rails.application.routes.draw do
   get '/', to: 'root#v3_root'
 
+  # configuration
+  get '/apps/:guid/configuration', to: 'app_configuration#show'
+  put '/apps/:guid/configuration', to: 'app_configuration#update'
+
   # apps
   get '/apps', to: 'apps_v3#index'
   post '/apps', to: 'apps_v3#create'

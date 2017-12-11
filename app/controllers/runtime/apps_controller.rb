@@ -267,7 +267,7 @@ module VCAP::CloudController
       space = find_guid(request_attrs['space_guid'], Space)
       verify_enable_ssh(space)
 
-      creator = V2::AppCreate.new(access_validator: self)
+      creator = VCAP::CloudController::V2::AppCreate.new(access_validator: self)
       process = creator.create(request_attrs)
 
       @app_event_repository.record_app_create(

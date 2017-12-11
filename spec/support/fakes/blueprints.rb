@@ -69,6 +69,10 @@ module VCAP::CloudController
     app { AppModel.make }
   end
 
+  PackageModel.blueprint(:ready) do
+    state    { VCAP::CloudController::PackageModel::READY_STATE }
+  end
+
   PackageModel.blueprint(:docker) do
     guid     { Sham.guid }
     state    { VCAP::CloudController::PackageModel::READY_STATE }
