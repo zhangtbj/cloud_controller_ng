@@ -108,56 +108,46 @@ RSpec.describe 'AppConfiguration' do
 
     context 'when there is an unstaged app' do
       it 'configures the app to match the configuration' do
+        rake_process = VCAP::CloudController::ProcessModel.make(app: app_model, type: 'rake')
         push_request = {
-          'applications' => [
+          "applications": [
             {
-              'name' => 'dora',
-              'disk_quota' => '1G',
-              'instances' => 3,
-              'memory' => '256M',
-              'stack' => 'my-sweet-stack'
+              "name": app_model.name,
+              "processes": [
+                {
+                  "type": "web",
+                  "disk_quota": 1,
+                  "instances": 5,
+                  "memory": 10,
+                  "command": "rackup"
+                },
+                {
+                  "type": "rake",
+                  "disk_quota": 1500,
+                  "instances": 0,
+                  "memory": 1000,
+                }
+              ]
             }
           ]
         }
-
+1+1
         put "/v3/apps/#{app_model.guid}/configuration", push_request.to_json, user_header
         expect(last_response.status).to eq(200)
 
-        # ask diego to build droplet
-        staging_callback_url = nil
-        assert_requested :put, %r{#{TestConfig.config[:diego][:stager_url]}/v1/staging/} do |request|
-          parsed_body = MultiJson.load(request.body)
-          staging_callback_url = parsed_body.fetch('completion_callback')
-        end
-
-        buildpack = VCAP::CloudController::Buildpack.make
-
-        expect(staging_callback_url).to match /start=true/
-
-        authorize(*VCAP::CloudController::InternalApi.credentials)
-
-        post staging_callback_url, {
-          result: {
-            lifecycle_type:     'buildpack',
-            lifecycle_metadata: {
-              buildpack_key:      buildpack.key,
-              detected_buildpack: 'detected_buildpack',
-            },
-            execution_metadata: 'execution_metadata',
-            process_types:      { web: 'start me' }
-          }
-        }.to_json
-
-        expect(last_response.status).to be 200
-
-        process = app_model.reload.processes.first
+        process1 = app_model.reload.processes.find { |p| p.type == 'web' }
+        process2 = rake_process.reload
 
         expect(app_model.name).to eq 'dora'
-        expect(process.disk_quota).to eq 1024
-        expect(process.instances).to eq 3
-        expect(process.memory).to eq 256
+        expect(process1.type).to eq 'web'
+        expect(process1.disk_quota).to eq 1
+        expect(process1.instances).to eq 5
+        expect(process1.memory).to eq 10
 
-        expect(process.stack.name).to eq 'my-sweet-stack'
+        expect(process2.type).to eq 'rake'
+        expect(process2.disk_quota).to eq 1500
+        expect(process2.instances).to eq 0
+        expect(process2.memory).to eq 1000
       end
     end
 
