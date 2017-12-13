@@ -1,27 +1,37 @@
 require 'fetchers/app_fetcher'
-
-class AppConfigurationController < ApplicationController
-  # {
-  #   "applications": [
-  #     {
-  #       "name": app.name,
-  #       "disk_quota": process.disk_quota,
-  #       "instances": process.instances,
-  #       "memory": process.memory,
-  #       "routes": [{route: app.routes.first.uri}],
-  #       "stack": process.stack.name,
-  #       "processes": [
-  #         {
-  #           "type": "web",
-  #           "disk_quota": 1,
-  #           "instances": 5,
-  #           "memory": 1,
-  #           "command": "rackup"
-  #         }
-  #       ]
-  #     }
-  #   ]
-  # }
+host	The host portion of the route. Required for shared-domains.
+  {
+    "applications": [
+      {
+        "name": "app-name",
+          "service_bindings": [
+            {
+              "binding_name": "my-binding",
+              "service_instance_name": "my-service-instance"
+            }
+          ]
+        "routes": [
+          {type: 'http/tcp', domain: 'some-domain.com', host: 'host', path: '/foo', port: '50', process: 'web'}
+           ]
+        "stack": process.stack.name,
+        "processes": [
+          {
+            "type": "web",
+            "disk_quota": 1,
+            "instances": 5,
+            "memory": 1,
+            "stack": "cflinuxfs2"
+          },
+          {
+            "type": "bogus",
+            "disk_quota": 1,
+            "instances": 5,
+            "memory": 1,
+          }
+        ]
+      }
+    ]
+  }
 
   def update
     app, _space, _org = AppFetcher.new.fetch(params[:guid])
