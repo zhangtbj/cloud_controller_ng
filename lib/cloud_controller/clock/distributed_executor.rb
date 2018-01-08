@@ -8,6 +8,8 @@ module VCAP::CloudController
       ensure_job_record_exists(name)
 
       ClockJob.db.transaction do
+        Thread.current[:transaction_started_at] = now
+        @logger.info("Transaction started at #{now}")
         job = ClockJob.find(name: name).lock!
 
         if need_to_run_job?(job, interval, timeout, fudge)

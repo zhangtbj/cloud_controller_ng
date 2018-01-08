@@ -1,9 +1,10 @@
 require 'utils/workpool'
+require 'securerandom'
 
 module VCAP::CloudController
   module Diego
     class ProcessesSync
-      BATCH_SIZE = 500
+      BATCH_SIZE = 20
 
       class Error < StandardError
       end
@@ -17,6 +18,8 @@ module VCAP::CloudController
       end
 
       def sync
+        @run_id = SecureRandom.uuid
+
         logger.info('run-process-sync')
         bump_freshness = true
         diego_lrps     = bbs_apps_client.fetch_scheduling_infos.index_by { |d| d.desired_lrp_key.process_guid }
@@ -96,12 +99,21 @@ module VCAP::CloudController
 
       def batched_processes
         last_id = 0
-
+        iteration_number = 0
         loop do
+          sleep 5
           processes = processes(last_id).all
           yield processes
-          return if processes.count < BATCH_SIZE
+
+          logger.info("run_id: #{@run_id}, iteration_number: #{iteration_number}, processes_count: #{processes.count}, last_id: #{last_id}, in_transaction?: #{ProcessModel.db.in_transaction?}, transaction_started_at: #{Thread.current[:transaction_started_at]}")
+
+          if processes.count < BATCH_SIZE
+            logger.info("run_id: #{@run_id}, final_iteration: #{iteration_number}, final_last_id: #{processes.last && processes.last.id} -- finalgrep")
+            return
+          end
+
           last_id = processes.last.id
+          iteration_number = iteration_number + 1
         end
       end
 
