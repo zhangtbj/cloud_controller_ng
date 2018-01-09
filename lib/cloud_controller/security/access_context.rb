@@ -24,6 +24,38 @@ module VCAP::CloudController
         VCAP::CloudController::SecurityContext.current_user
       end
 
+      def can_read_globally?
+        permission_queryer.can_read_globally?
+      end
+
+      def can_see_secrets_globally?
+        permission_queryer.can_see_secrets_globally?
+      end
+
+      def can_write_globally?
+        permission_queryer.can_write_globally?
+      end
+
+      def can_read_from_org?(org)
+        !org.nil? && permission_queryer.can_read_from_org?(org)
+      end
+
+      def can_write_to_org?(org)
+        !org.nil? && permission_queryer.can_write_to_org?(org)
+      end
+
+      def can_read_from_space?(space, org)
+        !space.nil? && !org.nil? && permission_queryer.can_read_from_space?(space, org)
+      end
+
+      def can_see_secrets_in_space?(space)
+        !space.nil? && permission_queryer.can_see_secrets_in_space?(space)
+      end
+
+      def can_write_to_space?(space)
+        !space.nil? && permission_queryer.can_write_to_space?(space)
+      end
+
       private
 
       attr_reader :permission_queryer
