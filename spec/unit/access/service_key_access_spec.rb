@@ -18,18 +18,70 @@ module VCAP::CloudController
     it_behaves_like :admin_full_access
     it_behaves_like :admin_read_only_access
 
+    context 'admin' do
+      include_context :admin_setup
+
+      context 'without related obj' do
+        it { is_expected.to allow_op_on_object(:index, object) }
+      end
+
+      context 'with related obj' do
+        it { is_expected.to allow_op_on_object(:index, object, { related_obj: service_instance }) }
+      end
+    end
+
+    context 'read-only admin' do
+      include_context :admin_read_only_setup
+
+      context 'without related obj' do
+        it { is_expected.to allow_op_on_object(:index, object) }
+      end
+
+      context 'with related obj' do
+        it { is_expected.to allow_op_on_object(:index, object, { related_obj: service_instance }) }
+      end
+    end
+
+    context 'global auditor' do
+      include_context :global_auditor_setup
+
+      context 'without related obj' do
+        it { is_expected.to allow_op_on_object(:index, object) }
+      end
+
+      context 'with related obj' do
+        it { is_expected.not_to allow_op_on_object(:index, object, { related_obj: service_instance }) }
+      end
+    end
+
     context 'for a logged in user (defensive)' do
       it_behaves_like :no_access
 
       it { is_expected.not_to allow_op_on_object(:read_env, object) }
+
+      context 'without related obj' do
+        it { is_expected.to allow_op_on_object(:index, object) }
+      end
+
+      context 'with related obj' do
+        it { is_expected.not_to allow_op_on_object(:index, object, { related_obj: service_instance }) }
+      end
     end
 
-    context 'a user that isnt logged in (defensive)' do
+    context "a user that isn't logged in (defensive)" do
       let(:user) { nil }
 
       it_behaves_like :no_access
 
       it { is_expected.not_to allow_op_on_object(:read_env, object) }
+
+      context 'without related obj' do
+        it { is_expected.to allow_op_on_object(:index, object) }
+      end
+
+      context 'with related obj' do
+        it { is_expected.not_to allow_op_on_object(:index, object, { related_obj: service_instance }) }
+      end
     end
 
     context 'organization manager (defensive)' do
@@ -38,6 +90,14 @@ module VCAP::CloudController
       it_behaves_like :no_access
 
       it { is_expected.not_to allow_op_on_object(:read_env, object) }
+
+      context 'without related obj' do
+        it { is_expected.to allow_op_on_object(:index, object) }
+      end
+
+      context 'with related obj' do
+        it { is_expected.not_to allow_op_on_object(:index, object, { related_obj: service_instance }) }
+      end
     end
 
     context 'organization billing manager (defensive)' do
@@ -46,6 +106,14 @@ module VCAP::CloudController
       it_behaves_like :no_access
 
       it { is_expected.not_to allow_op_on_object(:read_env, object) }
+
+      context 'without related obj' do
+        it { is_expected.to allow_op_on_object(:index, object) }
+      end
+
+      context 'with related obj' do
+        it { is_expected.not_to allow_op_on_object(:index, object, { related_obj: service_instance }) }
+      end
     end
 
     context 'organization auditor (defensive)' do
@@ -54,6 +122,14 @@ module VCAP::CloudController
       it_behaves_like :no_access
 
       it { is_expected.not_to allow_op_on_object(:read_env, object) }
+
+      context 'without related obj' do
+        it { is_expected.to allow_op_on_object(:index, object) }
+      end
+
+      context 'with related obj' do
+        it { is_expected.not_to allow_op_on_object(:index, object, { related_obj: service_instance }) }
+      end
     end
 
     context 'organization user (defensive)' do
@@ -62,6 +138,14 @@ module VCAP::CloudController
       it_behaves_like :no_access
 
       it { is_expected.not_to allow_op_on_object(:read_env, object) }
+
+      context 'without related obj' do
+        it { is_expected.to allow_op_on_object(:index, object) }
+      end
+
+      context 'with related obj' do
+        it { is_expected.not_to allow_op_on_object(:index, object, { related_obj: service_instance }) }
+      end
     end
 
     context 'space auditor' do
@@ -73,6 +157,14 @@ module VCAP::CloudController
       it_behaves_like :no_access
 
       it { is_expected.not_to allow_op_on_object(:read_env, object) }
+
+      context 'without related obj' do
+        it { is_expected.to allow_op_on_object(:index, object) }
+      end
+
+      context 'with related obj' do
+        it { is_expected.not_to allow_op_on_object(:index, object, { related_obj: service_instance }) }
+      end
     end
 
     context 'space manager (defensive)' do
@@ -84,6 +176,14 @@ module VCAP::CloudController
       it_behaves_like :no_access
 
       it { is_expected.not_to allow_op_on_object(:read_env, object) }
+
+      context 'without related obj' do
+        it { is_expected.to allow_op_on_object(:index, object) }
+      end
+
+      context 'with related obj' do
+        it { is_expected.not_to allow_op_on_object(:index, object, { related_obj: service_instance }) }
+      end
     end
 
     context 'space developer' do
@@ -103,6 +203,14 @@ module VCAP::CloudController
 
         it_behaves_like :read_only_access
       end
+
+      context 'without related obj' do
+        it { is_expected.to allow_op_on_object(:index, object) }
+      end
+
+      context 'with related obj' do
+        it { is_expected.to allow_op_on_object(:index, object, { related_obj: service_instance }) }
+      end
     end
 
     context 'any user using client without cloud_controller.write' do
@@ -119,6 +227,14 @@ module VCAP::CloudController
       end
 
       it_behaves_like :read_only_access
+
+      context 'without related obj' do
+        it { is_expected.to allow_op_on_object(:index, object) }
+      end
+
+      context 'with related obj' do
+        it { is_expected.to allow_op_on_object(:index, object, { related_obj: service_instance }) }
+      end
     end
 
     context 'any user using client without cloud_controller.read' do
@@ -135,6 +251,14 @@ module VCAP::CloudController
       end
 
       it_behaves_like :no_access
+
+      context 'without related obj' do
+        it { is_expected.to allow_op_on_object(:index, object) }
+      end
+
+      context 'with related obj' do
+        it { is_expected.to allow_op_on_object(:index, object, { related_obj: service_instance }) }
+      end
     end
   end
 end
