@@ -41,15 +41,15 @@ module VCAP::CloudController
     # These methods should be called first to determine if the user's token has the appropriate scope for the operation
 
     def read_with_token?(_)
-      admin_user? || admin_read_only_user? || has_read_scope? || global_auditor?
+      context.can_read_resources?
     end
 
     def create_with_token?(_)
-      admin_user? || has_write_scope?
+      context.can_write_resources?
     end
 
     def read_for_update_with_token?(_)
-      admin_user? || has_write_scope?
+      context.can_write_resources?
     end
 
     def can_remove_related_object_with_token?(*args)
@@ -61,11 +61,11 @@ module VCAP::CloudController
     end
 
     def update_with_token?(_)
-      admin_user? || has_write_scope?
+      context.can_write_resources?
     end
 
     def delete_with_token?(_)
-      admin_user? || has_write_scope?
+      context.can_write_resources?
     end
 
     def index_with_token?(_)
@@ -77,10 +77,6 @@ module VCAP::CloudController
 
     def logged_in?
       !context.user.nil? || context.roles.present?
-    end
-
-    def has_write_scope?
-      VCAP::CloudController::SecurityContext.scopes.include?('cloud_controller.write')
     end
 
     def has_read_scope?

@@ -25,7 +25,7 @@ module VCAP::CloudController
     end
 
     def index?(_, params=nil)
-      return true if admin_user? || admin_read_only_user?
+      return true if context.can_see_secrets_globally?
       return true unless params && params.key?(:related_obj)
       params[:related_obj].space.has_developer?(context.user)
     end

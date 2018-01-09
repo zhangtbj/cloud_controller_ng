@@ -50,7 +50,7 @@ module VCAP::CloudController
     end
 
     def upload_with_token?(_)
-      admin_user? || has_write_scope?
+      context.can_write_resources?
     end
 
     private

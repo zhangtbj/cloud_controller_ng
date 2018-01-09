@@ -1,7 +1,7 @@
 module VCAP::CloudController
   class ServiceUsageEventAccess < BaseAccess
     def index?(*_)
-      admin_user? || admin_read_only_user?
+      context.can_see_secrets_globally?
     end
 
     def reset?(*_)
