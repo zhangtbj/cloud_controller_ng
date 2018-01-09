@@ -3,6 +3,11 @@ module VCAP::CloudController
     class AccessContext
       include ::Allowy::Context
 
+      def initialize(permission_queryer)
+        super()
+        @permission_queryer = permission_queryer
+      end
+
       def admin_override
         VCAP::CloudController::SecurityContext.admin? || VCAP::CloudController::SecurityContext.admin_read_only? || VCAP::CloudController::SecurityContext.global_auditor?
       end
@@ -18,6 +23,10 @@ module VCAP::CloudController
       def user
         VCAP::CloudController::SecurityContext.current_user
       end
+
+      private
+
+      attr_reader :permission_queryer
     end
   end
 end

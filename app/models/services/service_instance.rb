@@ -129,7 +129,7 @@ module VCAP::CloudController
     end
 
     def to_hash(opts={})
-      access_context = VCAP::CloudController::Security::AccessContext.new
+      access_context = Security::AccessContext.new(VCAP::CloudController::Permissions::SecurityContextQueryer.new)
       if access_context.cannot?(:read_env, self)
         opts[:redact] = ['credentials']
       end

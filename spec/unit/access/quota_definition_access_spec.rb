@@ -2,7 +2,8 @@ require 'spec_helper'
 
 module VCAP::CloudController
   RSpec.describe QuotaDefinitionAccess, type: :access do
-    subject(:access) { QuotaDefinitionAccess.new(Security::AccessContext.new) }
+    let(:access_context) { Security::AccessContext.new(VCAP::CloudController::Permissions::SecurityContextQueryer.new) }
+    subject(:access) { QuotaDefinitionAccess.new(access_context) }
     let(:scopes) { ['cloud_controller.read', 'cloud_controller.write'] }
 
     let(:user) { VCAP::CloudController::User.make }

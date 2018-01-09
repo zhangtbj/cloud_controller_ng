@@ -519,7 +519,8 @@ module VCAP::CloudController
     end
 
     def to_hash(opts={})
-      opts[:redact] = if !VCAP::CloudController::Security::AccessContext.new.can?(:read_env, self)
+      access_context = Security::AccessContext.new(VCAP::CloudController::Permissions::SecurityContextQueryer.new)
+      opts[:redact] = if !access_context.can?(:read_env, self)
                         %w(environment_json system_env_json)
                       end
       super(opts)

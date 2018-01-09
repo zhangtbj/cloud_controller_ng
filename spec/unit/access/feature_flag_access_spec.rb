@@ -2,7 +2,8 @@ require 'spec_helper'
 
 module VCAP::CloudController
   RSpec.describe FeatureFlagAccess, type: :access do
-    subject(:access) { FeatureFlagAccess.new(Security::AccessContext.new) }
+    let(:access_context) { Security::AccessContext.new(VCAP::CloudController::Permissions::SecurityContextQueryer.new) }
+    subject(:access) { FeatureFlagAccess.new(access_context) }
     let(:user) { VCAP::CloudController::User.make }
     let(:object) { VCAP::CloudController::FeatureFlag.make }
 

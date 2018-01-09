@@ -6,7 +6,8 @@ module VCAP::CloudController
     let(:user) { User.make(active: true) }
 
     describe '#validate_access' do
-      let(:access_context) { Security::AccessContext.new }
+      let(:access_context) { Security::AccessContext.new(VCAP::CloudController::Permissions::SecurityContextQueryer.new) }
+      subject(:access) { ServiceUsageEventAccess.new(access_context) }
       let(:obj) { double('test object') }
       let(:fields) { { 'key' => 1 } }
 
