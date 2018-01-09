@@ -32,7 +32,7 @@ class VCAP::CloudController::Permissions::Queryer
     @current_user_guid = current_user_guid
   end
 
-  def can_read?(space_guid, org_guid)
+  def can_read_from_space?(space_guid, org_guid)
     science 'can_read_from_space?' do |e|
       e.context(space_guid: space_guid, org_guid: org_guid, action: 'space.read')
       e.use { db_permissions.can_read_from_space?(space_guid, org_guid) }
@@ -90,7 +90,7 @@ class VCAP::CloudController::Permissions::Queryer
     end
   end
 
-  def can_see_secrets?(space)
+  def can_see_secrets_in_space?(space)
     science 'can_see_secrets_in_space?' do |e|
       e.context(space_guid: space.guid, org_guid: space.organization.guid, action: 'space.read_secrets')
       e.use { db_permissions.can_see_secrets_in_space?(space.guid, space.organization.guid) }
@@ -100,7 +100,7 @@ class VCAP::CloudController::Permissions::Queryer
     end
   end
 
-  def can_write?(space_guid)
+  def can_write_to_space?(space_guid)
     science 'can_write_to_space?' do |e|
       e.context(space_guid: space_guid, action: 'space.write')
       e.use { db_permissions.can_write_to_space?(space_guid) }
