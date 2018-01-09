@@ -90,6 +90,7 @@ require 'cloud_controller/upload_buildpack'
 require 'cloud_controller/errors/instances_unavailable'
 
 require 'cloud_controller/permissions/queryer'
+require 'cloud_controller/permissions/security_context_queryer'
 
 require 'cloud_controller/perm/client'
 require 'cloud_controller/perm/permissions'
