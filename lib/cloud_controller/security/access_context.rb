@@ -24,6 +24,14 @@ module VCAP::CloudController
         VCAP::CloudController::SecurityContext.current_user
       end
 
+      def can_read_resources?
+        permission_queryer.can_read_resources?
+      end
+
+      def can_write_resources?
+        permission_queryer.can_write_resources?
+      end
+
       def can_read_globally?
         permission_queryer.can_read_globally?
       end

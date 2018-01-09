@@ -1,5 +1,17 @@
 module VCAP::CloudController
   class Permissions::SecurityContextQueryer
+    READ_SCOPE = 'cloud_controller.read'.freeze
+    WRITE_SCOPE = 'cloud_controller.write'.freeze
+
+    def can_read_resources?
+      security_context.admin? || security_context.admin_read_only? || security_context.global_auditor? ||
+        security_context.scopes.include?(READ_SCOPE)
+    end
+
+    def can_write_resources?
+      security_context.admin? || security_context.scopes.include?(WRITE_SCOPE)
+    end
+
     def can_read_globally?
       security_context.admin? || security_context.admin_read_only? || security_context.global_auditor?
     end

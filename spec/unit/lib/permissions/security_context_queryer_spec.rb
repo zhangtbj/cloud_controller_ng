@@ -13,6 +13,106 @@ module VCAP::CloudController
       set_current_user(user)
     end
 
+    describe '#can_read_resources?' do
+      it 'returns true if the user is an admin' do
+        set_current_user_as_admin
+
+        can_read_resources = subject.can_read_resources?
+
+        expect(can_read_resources).to equal(true)
+      end
+
+      it 'returns true if the user is a read-only admin' do
+        set_current_user_as_admin_read_only
+
+        can_read_resources = subject.can_read_resources?
+
+        expect(can_read_resources).to equal(true)
+      end
+
+      it 'returns true if the user is a global auditor' do
+        set_current_user_as_global_auditor
+
+        can_read_resources = subject.can_read_resources?
+
+        expect(can_read_resources).to equal(true)
+      end
+
+      it 'returns true if the user is a regular user with the read scope' do
+        set_current_user(user, { 'scopes': ['cloud_controller.read'] })
+
+        can_read_resources = subject.can_read_resources?
+
+        expect(can_read_resources).to equal(true)
+      end
+
+      it 'returns false if the user is a regular user without the read scope' do
+        set_current_user(user, { 'scopes': ['cloud_controller.write'] })
+
+        can_read_resources = subject.can_read_resources?
+
+        expect(can_read_resources).to equal(false)
+      end
+
+      it 'returns false if the user is unauthenticated' do
+        set_current_user(nil)
+
+        can_read_resources = subject.can_read_resources?
+
+        expect(can_read_resources).to equal(false)
+      end
+    end
+
+    describe '#can_write_resources?' do
+      it 'returns true if the user is an admin' do
+        set_current_user_as_admin
+
+        can_write_resources = subject.can_write_resources?
+
+        expect(can_write_resources).to equal(true)
+      end
+
+      it 'returns false if the user is a write-only admin' do
+        set_current_user_as_admin_read_only({ 'scopes': [] })
+
+        can_write_resources = subject.can_write_resources?
+
+        expect(can_write_resources).to equal(false)
+      end
+
+      it 'returns false if the user is a global auditor' do
+        set_current_user_as_global_auditor({ 'scopes': [] })
+
+        can_write_resources = subject.can_write_resources?
+
+        expect(can_write_resources).to equal(false)
+      end
+
+      it 'returns true if the user is a regular user with the write scope' do
+        set_current_user(user, { 'scopes': ['cloud_controller.write'] })
+
+        can_write_resources = subject.can_write_resources?
+
+        expect(can_write_resources).to equal(true)
+      end
+
+      it 'returns false if the user is a regular user without the write scope' do
+        set_current_user(user, { 'scopes': ['cloud_controller.read'] })
+
+        can_write_resources = subject.can_write_resources?
+
+        expect(can_write_resources).to equal(false)
+      end
+
+      it 'returns false if the user is unauthenticated' do
+        set_current_user(nil)
+
+        can_write_resources = subject.can_write_resources?
+
+        expect(can_write_resources).to equal(false)
+      end
+    end
+
     describe '#can_read_globally?' do
       it 'returns true if the user is an admin' do
         set_current_user_as_admin

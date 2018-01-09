@@ -10,6 +10,22 @@ module VCAP::CloudController
 
       subject { AccessContext.new(permission_queryer) }
 
+      describe '#can_read_resources?' do
+        it 'returns the result from the queryer' do
+          allow(permission_queryer).to receive(:can_read_resources?).and_return('fake read resources')
+
+          expect(subject.can_read_resources?).to eq('fake read resources')
+        end
+      end
+
+      describe '#can_write_resources?' do
+        it 'returns the result from the queryer' do
+          allow(permission_queryer).to receive(:can_write_resources?).and_return('fake write resources')
+
+          expect(subject.can_write_resources?).to eq('fake write resources')
+        end
+      end
+
       describe '#can_read_globally?' do
         it 'returns the result from the queryer' do
           allow(permission_queryer).to receive(:can_read_globally?).and_return('fake read globally')
