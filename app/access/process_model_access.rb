@@ -27,8 +27,7 @@ module VCAP::CloudController
     end
 
     def read_env?(app)
-      return true if admin_user? || admin_read_only_user?
-      app.space.has_developer?(context.user)
+      context.can_see_secrets_in_space?(app.space)
     end
 
     def read_env_with_token?(app)
@@ -36,8 +35,7 @@ module VCAP::CloudController
     end
 
     def read_permissions?(app)
-      return true if admin_user? || admin_read_only_user?
-      app.space.has_developer?(context.user)
+      context.can_see_secrets_in_space?(app.space)
     end
 
     def read_permissions_with_token?(app)

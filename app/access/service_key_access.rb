@@ -11,13 +11,11 @@ module VCAP::CloudController
     end
 
     def read?(service_key)
-      return true if admin_user? || admin_read_only_user?
-      service_key.service_instance.space.has_developer?(context.user)
+      context.can_see_secrets_in_space?(service_key.service_instance.space)
     end
 
     def read_env?(service_key)
-      return true if admin_user? || admin_read_only_user?
-      service_key.space.has_developer?(context.user)
+      context.can_see_secrets_in_space?(service_key.space)
     end
 
     def read_env_with_token?(service_key)
@@ -27,7 +25,7 @@ module VCAP::CloudController
     def index?(_, params=nil)
       return true if context.can_see_secrets_globally?
       return true unless params && params.key?(:related_obj)
-      params[:related_obj].space.has_developer?(context.user)
+      context.can_see_secrets_in_space?(params[:related_obj].space)
     end
   end
 end
