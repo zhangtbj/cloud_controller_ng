@@ -2,154 +2,112 @@ require 'spec_helper'
 
 module VCAP::CloudController
   RSpec.describe DomainAccess, type: :access do
-    subject(:access) { DomainAccess.new(Security::AccessContext.new) }
-    let(:token) { { 'scope' => ['cloud_controller.read', 'cloud_controller.write'] } }
-
     let(:user) { User.make }
-    let(:org) { Organization.make }
-    let(:space) { Space.make(organization: org) }
 
-    let(:object) { Domain.make }
+    subject { DomainAccess.new(Security::AccessContext.new) }
 
-    before do
-      SecurityContext.set(user, token)
+    context 'when the domain is shared' do
+      index_table = {
+        unauthenticated: true,
+        reader_and_writer: true,
+        reader: true,
+        writer: true,
+
+        admin: true,
+        admin_read_only: true,
+        global_auditor: true,
+      }
+
+      read_table = {
+        unauthenticated: false,
+        reader_and_writer: true,
+        reader: true,
+        writer: false,
+
+        admin: true,
+        admin_read_only: true,
+        global_auditor: true,
+      }
+
+      write_table = {
+        unauthenticated: false,
+        reader_and_writer: false,
+        reader: false,
+        writer: false,
+
+        admin: true,
+        admin_read_only: false,
+        global_auditor: false,
+      }
+
+      let(:object) { Domain.make }
+
+      it_behaves_like('an access control', :create, write_table)
+      it_behaves_like('an access control', :delete, write_table)
+      it_behaves_like('an access control', :index, index_table)
+      it_behaves_like('an access control', :read, read_table)
+      it_behaves_like('an access control', :read_for_update, write_table)
+      it_behaves_like('an access control', :update, write_table)
     end
 
-    after do
-      SecurityContext.clear
-    end
+    context 'when the domain is owned by an organization' do
+      index_table = {
+        unauthenticated: true,
+        reader_and_writer: true,
+        reader: true,
+        writer: true,
 
-    context 'when the domain is a private domain' do
-      let(:object) { PrivateDomain.make(owning_organization: org) }
+        admin: true,
+        admin_read_only: true,
+        global_auditor: true,
 
-      context 'admin' do
-        include_context :admin_setup
+        org_user: true,
+        org_manager: true,
+        org_auditor: true,
+        org_billing_manager: true,
+      }
 
-        before { FeatureFlag.make(name: 'private_domain_creation', enabled: false) }
+      read_table = {
+        unauthenticated: false,
+        reader_and_writer: false,
+        reader: false,
+        writer: false,
 
-        it_behaves_like :full_access
-      end
+        admin: true,
+        admin_read_only: true,
+        global_auditor: true,
 
-      context 'admin read only' do
-        include_context :admin_read_only_setup
+        org_user: false,
+        org_manager: true,
+        org_auditor: true,
+        org_billing_manager: false,
+      }
 
-        before { FeatureFlag.make(name: 'private_domain_creation', enabled: false) }
+      write_table = {
+        unauthenticated: false,
+        reader_and_writer: false,
+        reader: false,
+        writer: false,
 
-        it_behaves_like :read_only_access
-      end
+        admin: true,
+        admin_read_only: false,
+        global_auditor: false,
 
-      context 'organization manager' do
-        before { org.add_manager(user) }
-        it_behaves_like :full_access
+        org_user: false,
+        org_manager: true,
+        org_auditor: false,
+        org_billing_manager: false,
+      }
 
-        context 'when private_domain_creation FeatureFlag is disabled' do
-          it 'cannot create a private domain' do
-            FeatureFlag.make(name: 'private_domain_creation', enabled: false, error_message: nil)
-            expect { subject.create?(object) }.to raise_error(CloudController::Errors::ApiError, /private_domain_creation/)
-          end
-        end
-      end
+      let(:org) { Organization.make }
+      let(:object) { Domain.make(owning_organization: org) }
 
-      context 'organization auditor' do
-        before { org.add_auditor(user) }
-        it_behaves_like :read_only_access
-      end
-
-      context 'organization user (defensive)' do
-        before { org.add_user(user) }
-        it_behaves_like :no_access
-      end
-
-      context 'organization billing manager (defensive)' do
-        before { org.add_billing_manager(user) }
-        it_behaves_like :no_access
-      end
-
-      context 'user in a different organization (defensive)' do
-        before do
-          different_organization = VCAP::CloudController::Organization.make
-          different_organization.add_user(user)
-        end
-
-        it_behaves_like :no_access
-      end
-
-      context 'manager in a different organization (defensive)' do
-        before do
-          different_organization = VCAP::CloudController::Organization.make
-          different_organization.add_manager(user)
-        end
-
-        it_behaves_like :no_access
-      end
-
-      context 'a user that isnt logged in (defensive)' do
-        let(:user) { nil }
-        it_behaves_like :no_access
-      end
-
-      context 'any user using client without cloud_controller.write' do
-        let(:token) { { 'scope' => ['cloud_controller.read'] } }
-
-        before do
-          org.add_user(user)
-          org.add_manager(user)
-          org.add_billing_manager(user)
-          org.add_auditor(user)
-          space.add_manager(user)
-          space.add_developer(user)
-          space.add_auditor(user)
-        end
-
-        it_behaves_like :read_only_access
-      end
-
-      context 'any user using client without cloud_controller.read' do
-        let(:token) { { 'scope' => [] } }
-
-        before do
-          org.add_user(user)
-          org.add_manager(user)
-          org.add_billing_manager(user)
-          org.add_auditor(user)
-          space.add_manager(user)
-          space.add_developer(user)
-          space.add_auditor(user)
-        end
-
-        it_behaves_like :no_access
-      end
-    end
-
-    context 'when the domain is a shared domain' do
-      let(:object) { SharedDomain.make }
-
-      it_behaves_like :admin_full_access
-      it_behaves_like :read_only_access
-      it_behaves_like :admin_read_only_access
-
-      context 'a user that isnt logged in (defensive)' do
-        let(:user) { nil }
-        let(:token) { { 'scope' => [] } }
-
-        it_behaves_like :no_access
-      end
-
-      context 'any user using client without cloud_controller.read' do
-        let(:token) { { 'scope' => [] } }
-
-        before do
-          org.add_user(user)
-          org.add_manager(user)
-          org.add_billing_manager(user)
-          org.add_auditor(user)
-          space.add_manager(user)
-          space.add_developer(user)
-          space.add_auditor(user)
-        end
-
-        it_behaves_like :no_access
-      end
+      it_behaves_like('an access control', :create, write_table)
+      it_behaves_like('an access control', :delete, write_table)
+      it_behaves_like('an access control', :index, index_table)
+      it_behaves_like('an access control', :read, read_table)
+      it_behaves_like('an access control', :read_for_update, write_table)
+      it_behaves_like('an access control', :update, write_table)
     end
   end
 end
