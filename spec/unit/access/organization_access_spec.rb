@@ -62,7 +62,7 @@ module VCAP::CloudController
       end
 
       context 'with a suspended organization' do
-        before { object.status = 'suspended' }
+        before { object.status = VCAP::CloudController::Organization::SUSPENDED }
 
         it_behaves_like :read_only_access
       end
@@ -85,7 +85,7 @@ module VCAP::CloudController
     context 'a user in the organization' do
       before do
         object.add_user(user)
-        object.status = 'active'
+        object.status = VCAP::CloudController::Organization::ACTIVE
       end
 
       it_behaves_like :read_only_access
