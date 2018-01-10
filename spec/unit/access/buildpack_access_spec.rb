@@ -2,32 +2,50 @@ require 'spec_helper'
 
 module VCAP::CloudController
   RSpec.describe BuildpackAccess, type: :access do
-    subject(:access) { BuildpackAccess.new(Security::AccessContext.new) }
     let(:user) { VCAP::CloudController::User.make }
     let(:object) { VCAP::CloudController::Buildpack.make }
 
-    it_should_behave_like :admin_read_only_access
+    subject { BuildpackAccess.new(Security::AccessContext.new) }
 
-    context 'for an admin' do
-      before { set_current_user_as_admin }
+    index_table = {
+      unauthenticated: true,
+      reader_and_writer: true,
+      reader: true,
+      writer: true,
 
-      include_context :admin_setup
-      it_behaves_like :full_access
-      it { is_expected.to allow_op_on_object :upload, object }
-    end
+      admin: true,
+      admin_read_only: true,
+      global_auditor: true,
+    }
 
-    context 'for a logged in user' do
-      before { set_current_user(user) }
+    read_table = {
+      unauthenticated: false,
+      reader_and_writer: true,
+      reader: true,
+      writer: false,
 
-      it_behaves_like :read_only_access
-      it { is_expected.not_to allow_op_on_object :upload, object }
+      admin: true,
+      admin_read_only: true,
+      global_auditor: true,
+    }
 
-      context 'using a client without cloud_controller.read' do
-        before { set_current_user(user, scopes: ['cloud_controller.write']) }
+    write_table = {
+      unauthenticated: false,
+      reader_and_writer: false,
+      reader: false,
+      writer: false,
 
-        it_behaves_like :no_access
-        it { is_expected.not_to allow_op_on_object :upload, object }
-      end
-    end
+      admin: true,
+      admin_read_only: false,
+      global_auditor: false,
+    }
+
+    it_behaves_like('an access control', :create, write_table)
+    it_behaves_like('an access control', :delete, write_table)
+    it_behaves_like('an access control', :index, index_table)
+    it_behaves_like('an access control', :read, read_table)
+    it_behaves_like('an access control', :read_for_update, write_table)
+    it_behaves_like('an access control', :update, write_table)
+    it_behaves_like('an access control', :upload, write_table)
   end
 end
