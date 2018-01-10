@@ -2,29 +2,49 @@ require 'spec_helper'
 
 module VCAP::CloudController
   RSpec.describe FeatureFlagAccess, type: :access do
-    subject(:access) { FeatureFlagAccess.new(Security::AccessContext.new) }
     let(:user) { VCAP::CloudController::User.make }
     let(:object) { VCAP::CloudController::FeatureFlag.make }
 
-    it_behaves_like :admin_full_access
-    it_behaves_like :admin_read_only_access
+    subject { FeatureFlagAccess.new(Security::AccessContext.new) }
 
-    context 'a user that has cloud_controller.read' do
-      before { set_current_user(user, scopes: ['cloud_controller.read']) }
+    index_table = {
+      unauthenticated: false,
+      reader_and_writer: true,
+      reader: true,
+      writer: false,
 
-      it_behaves_like :read_only_access
-    end
+      admin: true,
+      admin_read_only: true,
+      global_auditor: false,
+    }
 
-    context 'a user that does not have cloud_controller.read' do
-      before { set_current_user(user, scopes: ['cloud_controller.write']) }
+    read_table = {
+      unauthenticated: false,
+      reader_and_writer: true,
+      reader: true,
+      writer: false,
 
-      it_behaves_like :no_access
-    end
+      admin: true,
+      admin_read_only: true,
+      global_auditor: false,
+    }
 
-    context 'a user that isnt logged in (defensive)' do
-      it_behaves_like :no_access
+    write_table = {
+      unauthenticated: false,
+      reader_and_writer: false,
+      reader: false,
+      writer: false,
 
-      it { is_expected.not_to allow_op_on_object :index, VCAP::CloudController::FeatureFlag }
-    end
+      admin: true,
+      admin_read_only: false,
+      global_auditor: false,
+    }
+
+    it_behaves_like('an access control', :create, write_table)
+    it_behaves_like('an access control', :delete, write_table)
+    it_behaves_like('an access control', :index, index_table)
+    it_behaves_like('an access control', :read, read_table)
+    it_behaves_like('an access control', :read_for_update, write_table)
+    it_behaves_like('an access control', :update, write_table)
   end
 end
