@@ -2,8 +2,7 @@ require 'spec_helper'
 
 module VCAP::CloudController
   RSpec.describe AppEventAccess, type: :access do
-    subject(:access) { AppEventAccess.new(Security::AccessContext.new) }
-    let(:token) { { 'scope' => ['cloud_controller.read', 'cloud_controller.write'] } }
+    subject { AppEventAccess.new(Security::AccessContext.new) }
 
     let(:user) { VCAP::CloudController::User.make }
     let(:org) { VCAP::CloudController::Organization.make }
@@ -11,112 +10,68 @@ module VCAP::CloudController
     let(:process) { VCAP::CloudController::ProcessModelFactory.make(space: space) }
     let(:object) { VCAP::CloudController::AppEvent.make(app: process) }
 
-    before do
-      SecurityContext.set(user, token)
-    end
+    index_table = {
+      unauthenticated: true,
+      reader_and_writer: true,
+      reader: true,
+      writer: true,
 
-    after do
-      SecurityContext.clear
-    end
+      admin: true,
+      admin_read_only: true,
+      global_auditor: true,
 
-    it_should_behave_like :admin_full_access
-    it_should_behave_like :admin_read_only_access
+      space_developer: true,
+      space_manager: true,
+      space_auditor: true,
+      org_user: true,
+      org_manager: true,
+      org_auditor: true,
+      org_billing_manager: true,
+    }
 
-    context 'organization manager' do
-      before { org.add_manager(user) }
-      it_behaves_like :read_only_access
-    end
+    read_table = {
+      unauthenticated: false,
+      reader_and_writer: false,
+      reader: false,
+      writer: false,
 
-    context 'organization user' do
-      before { org.add_user(user) }
-      it_behaves_like :no_access
-    end
+      admin: true,
+      admin_read_only: true,
+      global_auditor: true,
 
-    context 'organization auditor' do
-      before { org.add_auditor(user) }
-      it_behaves_like :no_access
-    end
+      space_developer: true,
+      space_manager: true,
+      space_auditor: true,
+      org_user: false,
+      org_manager: true,
+      org_auditor: false,
+      org_billing_manager: false,
+    }
 
-    context 'billing manager' do
-      before { org.add_billing_manager(user) }
-      it_behaves_like :no_access
-    end
+    write_table = {
+      unauthenticated: false,
+      reader_and_writer: false,
+      reader: false,
+      writer: false,
 
-    context 'space developer' do
-      before do
-        org.add_user(user)
-        space.add_developer(user)
-      end
-      it_behaves_like :read_only_access
-    end
+      admin: true,
+      admin_read_only: false,
+      global_auditor: false,
 
-    context 'space manager' do
-      before do
-        org.add_user(user)
-        space.add_manager(user)
-      end
-      it_behaves_like :read_only_access
-    end
+      space_developer: false,
+      space_manager: false,
+      space_auditor: false,
+      org_user: false,
+      org_manager: false,
+      org_auditor: false,
+      org_billing_manager: false,
+    }
 
-    context 'space auditor' do
-      before do
-        org.add_user(user)
-        space.add_auditor(user)
-      end
-      it_behaves_like :read_only_access
-    end
-
-    context 'user in a different organization (defensive)' do
-      before do
-        different_organization = VCAP::CloudController::Organization.make
-        different_organization.add_user(user)
-      end
-
-      it_behaves_like :no_access
-    end
-
-    context 'manager in a different organization (defensive)' do
-      before do
-        different_organization = VCAP::CloudController::Organization.make
-        different_organization.add_manager(user)
-      end
-
-      it_behaves_like :no_access
-    end
-
-    context 'a user that isnt logged in (defensive)' do
-      let(:user) { nil }
-      it_behaves_like :no_access
-    end
-
-    context 'any user using client without cloud_controller.write' do
-      let(:token) { { 'scope' => ['cloud_controller.read'] } }
-      before do
-        org.add_user(user)
-        org.add_manager(user)
-        org.add_billing_manager(user)
-        org.add_auditor(user)
-        space.add_manager(user)
-        space.add_developer(user)
-        space.add_auditor(user)
-      end
-
-      it_behaves_like :read_only_access
-    end
-
-    context 'any user using client without cloud_controller.read' do
-      let(:token) { { 'scope' => [] } }
-      before do
-        org.add_user(user)
-        org.add_manager(user)
-        org.add_billing_manager(user)
-        org.add_auditor(user)
-        space.add_manager(user)
-        space.add_developer(user)
-        space.add_auditor(user)
-      end
-
-      it_behaves_like :no_access
-    end
+    it_behaves_like('an access class', :create, write_table)
+    it_behaves_like('an access class', :delete, write_table)
+    it_behaves_like('an access class', :index, index_table)
+    it_behaves_like('an access class', :read, read_table)
+    it_behaves_like('an access class', :read_for_update, write_table)
+    it_behaves_like('an access class', :update, write_table)
   end
 end
