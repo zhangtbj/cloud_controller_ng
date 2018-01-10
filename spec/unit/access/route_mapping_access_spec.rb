@@ -33,7 +33,7 @@ module VCAP::CloudController
 
       context 'when the organization is suspended' do
         before do
-          org.status = 'suspended'
+          org.status = VCAP::CloudController::Organization::SUSPENDED
           org.save
         end
 

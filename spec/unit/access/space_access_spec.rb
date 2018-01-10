@@ -25,7 +25,7 @@ module VCAP::CloudController
       it_behaves_like :full_access
 
       context 'when the organization is suspended' do
-        before { object.organization.status = 'suspended' }
+        before { object.organization.status = VCAP::CloudController::Organization::SUSPENDED }
         it_behaves_like :read_only_access
       end
     end
@@ -43,7 +43,7 @@ module VCAP::CloudController
       it { is_expected.not_to allow_op_on_object :delete, object }
 
       context 'when the organization is suspended' do
-        before { object.organization.status = 'suspended' }
+        before { object.organization.status = VCAP::CloudController::Organization::SUSPENDED }
 
         it_behaves_like :read_only_access
       end
