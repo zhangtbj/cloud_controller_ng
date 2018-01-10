@@ -2,45 +2,50 @@ require 'spec_helper'
 
 module VCAP::CloudController
   RSpec.describe AppUsageEventAccess, type: :access do
-    subject(:access) { AppUsageEventAccess.new(Security::AccessContext.new) }
-    let(:token) { { 'scope' => ['cloud_controller.read', 'cloud_controller.write'] } }
     let(:user) { VCAP::CloudController::User.make }
     let(:object) { VCAP::CloudController::AppUsageEvent.make }
 
-    before do
-      SecurityContext.set(user, token)
-    end
+    subject(:access) { AppUsageEventAccess.new(Security::AccessContext.new) }
 
-    after do
-      SecurityContext.clear
-    end
+    index_table = {
+      unauthenticated: false,
+      reader_and_writer: false,
+      reader: false,
+      writer: false,
 
-    it_behaves_like :admin_read_only_access
+      admin: true,
+      admin_read_only: true,
+      global_auditor: false,
+    }
 
-    context 'an admin' do
-      include_context :admin_setup
-      it_behaves_like :full_access
-      it { is_expected.to allow_op_on_object :reset, VCAP::CloudController::AppUsageEvent }
-    end
+    read_table = {
+      unauthenticated: false,
+      reader_and_writer: false,
+      reader: false,
+      writer: false,
 
-    context 'a user that is not an admin (defensive)' do
-      it_behaves_like :no_access
-      it { is_expected.not_to allow_op_on_object :index, VCAP::CloudController::AppUsageEvent }
-      it { is_expected.not_to allow_op_on_object :reset, VCAP::CloudController::AppUsageEvent }
-    end
+      admin: true,
+      admin_read_only: true,
+      global_auditor: true,
+    }
 
-    context 'using a client without cloud_controller.read' do
-      let(:token) { { 'scope' => [] } }
-      it_behaves_like :no_access
-      it { is_expected.not_to allow_op_on_object :index, VCAP::CloudController::AppUsageEvent }
-      it { is_expected.not_to allow_op_on_object :reset, VCAP::CloudController::AppUsageEvent }
-    end
+    write_table = {
+      unauthenticated: false,
+      reader_and_writer: false,
+      reader: false,
+      writer: false,
 
-    context 'a user that isnt logged in (defensive)' do
-      let(:user) { nil }
-      it_behaves_like :no_access
-      it { is_expected.not_to allow_op_on_object :index, VCAP::CloudController::AppUsageEvent }
-      it { is_expected.not_to allow_op_on_object :reset, VCAP::CloudController::AppUsageEvent }
-    end
+      admin: true,
+      admin_read_only: false,
+      global_auditor: false,
+    }
+
+    it_behaves_like('an access control', :create, write_table)
+    it_behaves_like('an access control', :delete, write_table)
+    it_behaves_like('an access control', :index, index_table)
+    it_behaves_like('an access control', :read, read_table)
+    it_behaves_like('an access control', :read_for_update, write_table)
+    it_behaves_like('an access control', :reset, write_table)
+    it_behaves_like('an access control', :update, write_table)
   end
 end
