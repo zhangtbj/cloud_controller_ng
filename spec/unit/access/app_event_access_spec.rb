@@ -67,11 +67,11 @@ module VCAP::CloudController
       org_billing_manager: false,
     }
 
-    it_behaves_like('an access class', :create, write_table)
-    it_behaves_like('an access class', :delete, write_table)
-    it_behaves_like('an access class', :index, index_table)
-    it_behaves_like('an access class', :read, read_table)
-    it_behaves_like('an access class', :read_for_update, write_table)
-    it_behaves_like('an access class', :update, write_table)
+    it_behaves_like('an access control', :create, write_table)
+    it_behaves_like('an access control', :delete, write_table)
+    it_behaves_like('an access control', :index, index_table)
+    it_behaves_like('an access control', :read, read_table)
+    it_behaves_like('an access control', :read_for_update, write_table)
+    it_behaves_like('an access control', :update, write_table)
   end
 end

@@ -4,11 +4,11 @@ module VCAP::CloudController
       admin_user? || admin_read_only_user?
     end
 
-    def reset?(object_class)
+    def reset?(_)
       admin_user?
     end
 
-    def reset_with_token?(object_class)
+    def reset_with_token?(_)
       admin_user?
     end
   end
