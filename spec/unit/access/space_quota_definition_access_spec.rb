@@ -20,7 +20,7 @@ module VCAP::CloudController
       it_behaves_like :full_access
 
       context 'when the organization is suspended' do
-        let(:org) { Organization.make(status: 'suspended') }
+        let(:org) { Organization.make(status: Organization::SUSPENDED) }
 
         it_behaves_like :read_only_access
       end

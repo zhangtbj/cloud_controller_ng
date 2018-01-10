@@ -93,7 +93,7 @@ module VCAP::CloudController
       end
 
       context 'when the organization is suspended' do
-        before { object.space.organization.status = 'suspended' }
+        before { object.space.organization.status = VCAP::CloudController::Organization::SUSPENDED }
         it_behaves_like :read_only_access
       end
 
