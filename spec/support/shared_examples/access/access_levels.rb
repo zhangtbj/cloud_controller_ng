@@ -1,10 +1,10 @@
 shared_examples :full_access do
   it { is_expected.to allow_op_on_object :create, object }
+  it { is_expected.to allow_op_on_object :delete, object }
+  it { is_expected.to allow_op_on_object :index, object.class }
   it { is_expected.to allow_op_on_object :read, object }
   it { is_expected.to allow_op_on_object :read_for_update, object }
   it { is_expected.to allow_op_on_object :update, object }
-  it { is_expected.to allow_op_on_object :delete, object }
-  it { is_expected.to allow_op_on_object :index, object.class }
 end
 
 shared_examples :read_only_access do
