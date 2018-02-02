@@ -4,13 +4,6 @@ module VCAP::CloudController
   RSpec.describe BuildpackLifecycleDataModel do
     subject(:lifecycle_data) { BuildpackLifecycleDataModel.new }
 
-    it_behaves_like 'a model with an encrypted attribute' do
-      let(:value_to_encrypt) { 'https://acme-buildpack.com' }
-      let(:encrypted_attr) { :buildpack_url }
-      let(:storage_column) { :encrypted_buildpack_url }
-      let(:attr_salt) { :encrypted_buildpack_url_salt }
-    end
-
     describe '#stack' do
       it 'persists the stack' do
         lifecycle_data.stack = 'cflinuxfs2'
@@ -118,42 +111,6 @@ module VCAP::CloudController
             expect(lifecycle_data.reload.buildpack_lifecycle_buildpacks.map(&:admin_buildpack_name)).to eq ['some-buildpack', nil]
           end
         end
-
-        context 'when supporting rolling deploys' do
-          before do
-            check_rolling_deploy_timebomb
-          end
-
-          context 'when the first buildpack specified is a custom url' do
-            it 'persists the buildpack with legacy fields' do
-              lifecycle_data.buildpacks = ['http://buildpack.example.com']
-              lifecycle_data.save
-              expect(lifecycle_data.reload.legacy_buildpack_url).to eq 'http://buildpack.example.com'
-              expect(lifecycle_data.reload.legacy_admin_buildpack_name).to be_nil
-            end
-
-            it 'reads a buildpack that was saved with legacy buildpack_url field' do
-              lifecycle_data.legacy_buildpack_url = 'http://buildpack.example.com'
-              lifecycle_data.save
-              expect(lifecycle_data.reload.buildpacks).to eq ['http://buildpack.example.com']
-            end
-          end
-
-          context 'when the first buildpack specified is an admin buildpack' do
-            it 'persists the buildpack with legacy fields' do
-              lifecycle_data.buildpacks = ['ruby']
-              lifecycle_data.save
-              expect(lifecycle_data.reload.legacy_buildpack_url).to be_nil
-              expect(lifecycle_data.reload.legacy_admin_buildpack_name).to eq 'ruby'
-            end
-
-            it 'reads a buildpack that was saved with legacy admin_buildpack_name field' do
-              lifecycle_data.legacy_admin_buildpack_name = 'ruby'
-              lifecycle_data.save
-              expect(lifecycle_data.reload.buildpacks).to eq ['ruby']
-            end
-          end
-        end
       end
 
       context 'admin buildpack name' do
@@ -163,18 +120,6 @@ module VCAP::CloudController
           lifecycle_data.buildpacks = ['ruby']
           lifecycle_data.save
           expect(lifecycle_data.reload.buildpacks).to eq ['ruby']
-        end
-
-        context 'when supporting rolling deploys' do
-          before do
-            check_rolling_deploy_timebomb
-          end
-
-          it 'also persists the buildpack under the legacy column' do
-            lifecycle_data.buildpacks = ['ruby']
-            lifecycle_data.save
-            expect(lifecycle_data.reload.legacy_admin_buildpack_name).to eq 'ruby'
-          end
         end
       end
     end
@@ -203,86 +148,10 @@ module VCAP::CloudController
                                                          CustomBuildpack.new(buildpack2_url)])
         end
       end
-
-      context 'when the buildpack is set via the legacy_* fields' do
-        context 'when the buildpack is an admin buildpack' do
-          let(:admin_buildpack) { Buildpack.make(name: 'susperia') }
-
-          before do
-            lifecycle_data.legacy_admin_buildpack_name = admin_buildpack.name
-          end
-
-          it 'returns an array of 1 Buildpack' do
-            expect(lifecycle_data.buildpack_models).to eq([admin_buildpack])
-          end
-        end
-
-        context 'when the buildpack is a custom buildpack' do
-          let(:buildpack_url) { 'http://example.org/wedgemount' }
-
-          before do
-            lifecycle_data.legacy_buildpack_url = buildpack_url
-          end
-
-          it 'returns an array of 1 Custom Buildpack' do
-            expect(lifecycle_data.buildpack_models).to eq([CustomBuildpack.new(buildpack_url)])
-          end
-        end
-      end
-    end
-
-    describe '#legacy_buildpack_model' do
-      before do
-        check_rolling_deploy_timebomb
-      end
-
-      let!(:admin_buildpack) { Buildpack.make(name: 'bob') }
-
-      context 'when the buildpack is nil' do
-        subject(:lifecycle_data) { BuildpackLifecycleDataModel.new(buildpacks: nil) }
-
-        it 'is AutoDetectionBuildpack' do
-          expect(lifecycle_data.send(:legacy_buildpack_model)).to be_an(AutoDetectionBuildpack)
-        end
-      end
-
-      context 'when the buildpack is an admin buildpack' do
-        subject(:lifecycle_data) { BuildpackLifecycleDataModel.new(buildpacks: [admin_buildpack.name]) }
-
-        it 'is the matching admin buildpack' do
-          expect(lifecycle_data.send(:legacy_buildpack_model)).to eq(admin_buildpack)
-        end
-      end
-
-      context 'when the buildpack is a custom buildpack (url)' do
-        let(:custom_buildpack_url) { 'https://github.com/buildpacks/the-best' }
-        subject(:lifecycle_data) { BuildpackLifecycleDataModel.new(buildpacks: [custom_buildpack_url]) }
-
-        it 'is a custom buildpack for the URL' do
-          # Temporary: legacy-buildpacks will be removed when the rolling-deploy support for
-          # singular => multiple buildpacks ends.
-          legacy_buildpack_model = lifecycle_data.send(:legacy_buildpack_model)
-          expect(legacy_buildpack_model).to be_a(CustomBuildpack)
-          expect(legacy_buildpack_model.url).to eq(custom_buildpack_url)
-        end
-      end
     end
 
     describe '#using_custom_buildpack?' do
       context 'when using a custom buildpack' do
-        context 'when using a single-instance legacy buildpack' do
-          before do
-            check_rolling_deploy_timebomb
-          end
-
-          subject(:lifecycle_data) { BuildpackLifecycleDataModel.new }
-
-          it 'returns true' do
-            lifecycle_data.legacy_buildpack_url = 'https://someurl.com'
-            expect(lifecycle_data.using_custom_buildpack?).to eq true
-          end
-        end
-
         context 'when using mutiple buildpacks' do
           subject(:lifecycle_data) {
             BuildpackLifecycleDataModel.new(buildpacks: ['https://github.com/buildpacks/the-best', 'ruby'])
@@ -304,19 +173,6 @@ module VCAP::CloudController
     end
 
     describe '#first_custom_buildpack_url' do
-      context 'when using a single-instance legacy buildpack' do
-        before do
-          check_rolling_deploy_timebomb
-        end
-
-        subject(:lifecycle_data) { BuildpackLifecycleDataModel.new }
-
-        it 'returns the first url' do
-          lifecycle_data.legacy_buildpack_url = 'https://someurl.com'
-          expect(lifecycle_data.first_custom_buildpack_url).to eq 'https://someurl.com'
-        end
-      end
-
       context 'when using multiple buildpacks' do
         context 'and there are custom buildpacks' do
           subject(:lifecycle_data) {
@@ -443,12 +299,6 @@ module VCAP::CloudController
         lifecycle_data.save
         expect(lifecycle_data.reload.build).to eq(build)
       end
-    end
-  end
-
-  def check_rolling_deploy_timebomb
-    if Time.now > Time.utc(2018, 2, 1)
-      raise Exception.new('No longer supporting rolling deploys for multiple buildpacks. This legacy behavior can now be removed.')
     end
   end
 end

@@ -5,8 +5,6 @@ module VCAP::CloudController
   class BuildpackLifecycleDataModel < Sequel::Model(:buildpack_lifecycle_data)
     LIFECYCLE_TYPE = Lifecycles::BUILDPACK
 
-    set_field_as_encrypted :buildpack_url, salt: :encrypted_buildpack_url_salt, column: :encrypted_buildpack_url
-
     many_to_one :droplet,
       class: '::VCAP::CloudController::DropletModel',
       key: :droplet_guid,
@@ -34,18 +32,8 @@ module VCAP::CloudController
     nested_attributes :buildpack_lifecycle_buildpacks, destroy: true
     add_association_dependencies buildpack_lifecycle_buildpacks: :destroy
 
-    alias_method :legacy_buildpack_url, :buildpack_url
-    alias_method :legacy_buildpack_url=, :buildpack_url=
-    alias_method :legacy_admin_buildpack_name, :admin_buildpack_name
-    alias_method :legacy_admin_buildpack_name=, :admin_buildpack_name=
-
     def buildpacks
-      if self.buildpack_lifecycle_buildpacks.present?
-        self.buildpack_lifecycle_buildpacks.map(&:name)
-      else
-        legacy_buildpack_name = self.legacy_admin_buildpack_name || self.legacy_buildpack_url
-        Array(legacy_buildpack_name)
-      end
+      self.buildpack_lifecycle_buildpacks.map(&:name)
     end
 
     def buildpack_models
@@ -54,19 +42,12 @@ module VCAP::CloudController
           Buildpack.find(name: buildpack.name) || CustomBuildpack.new(buildpack.name)
         end
       else
-        [legacy_buildpack_model]
+        [AutoDetectionBuildpack.new]
       end
     end
 
     def buildpacks=(new_buildpacks)
       new_buildpacks ||= []
-      first_buildpack = new_buildpacks.first
-      # During the rolling-deploy transition period, update both old and new columns
-      if UriUtils.is_buildpack_uri?(first_buildpack)
-        self.legacy_buildpack_url = first_buildpack
-      else
-        self.legacy_admin_buildpack_name = first_buildpack
-      end
 
       buildpacks_to_remove = self.buildpack_lifecycle_buildpacks.map { |bp| { id: bp.id, _delete: true } }
       buildpacks_to_add = new_buildpacks.map { |buildpack_url| attributes_from_name(buildpack_url) }
@@ -74,11 +55,11 @@ module VCAP::CloudController
     end
 
     def using_custom_buildpack?
-      buildpack_lifecycle_buildpacks.any?(&:custom?) || legacy_buildpack_model.custom?
+      buildpack_lifecycle_buildpacks.any?(&:custom?)
     end
 
     def first_custom_buildpack_url
-      buildpack_lifecycle_buildpacks.find(&:custom?)&.buildpack_url || legacy_buildpack_url
+      buildpack_lifecycle_buildpacks.find(&:custom?)&.buildpack_url
     end
 
     def to_hash
@@ -102,20 +83,6 @@ module VCAP::CloudController
       else
         { buildpack_url: nil, admin_buildpack_name: name }
       end
-    end
-
-    def legacy_buildpack
-      return self.legacy_admin_buildpack_name if self.legacy_admin_buildpack_name.present?
-      self.buildpack_url
-    end
-
-    def legacy_buildpack_model
-      return AutoDetectionBuildpack.new if legacy_buildpack.nil?
-
-      known_buildpack = Buildpack.find(name: legacy_buildpack)
-      return known_buildpack if known_buildpack
-
-      CustomBuildpack.new(legacy_buildpack)
     end
   end
 end
