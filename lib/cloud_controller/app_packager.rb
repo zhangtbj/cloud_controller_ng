@@ -83,30 +83,38 @@ class AppPackager
 
   def any_outside_symlinks?(destination_dir)
     Zip::File.open(@path) do |in_zip|
-      in_zip.any? do |entry|
-        if !symlink?(entry)
-          false
-        else
-          parent_dir = entry.parent_as_string
-          target_dir = in_zip.file.read(entry.name)
-          if parent_dir
-            # Link is "upwards" -- starts with a "../"
-            base_dir = File.expand_path(parent_dir, destination_dir)
-            final_dir = File.expand_path(target_dir, base_dir)
-          else
-            # Link is "downwards" or to an absolute dir
-            final_dir = File.expand_path(target_dir, destination_dir)
-          end
-          !final_dir.starts_with?(destination_dir)
-        end
-      end
+      in_zip.any? { |entry| is_unsafe_symlink?(destination_dir, in_zip, entry) }
     end
   rescue Zip::Error
     invalid_zip!
   end
 
+  def is_unsafe_symlink?(destination_dir, in_zip, entry)
+    return false if !symlink?(entry)
+
+    link_final_path = File.expand_path(entry.name, destination_dir)
+    # All bets are off if there's a symlink sitting outside the zipfile root
+    return true if !link_final_path.starts_with?(destination_dir)
+
+    target_path = in_zip.file.read(entry.name)
+    parent_dir = entry.parent_as_string
+    if parent_dir
+      base_dir = File.expand_path(parent_dir, destination_dir)
+      # If the symbolic link LINK lives outside the zip directory it will end up at the root
+      final_path = File.expand_path(target_path, base_dir)
+    else
+      # Not sure if we can have a symbolic link without a parent_dir entry
+      final_path = File.expand_path(target_path, destination_dir)
+    end
+    !final_path.starts_with?(destination_dir)
+  end
+
   def symlink?(entry)
     entry.ftype == :symlink
+  end
+
+  def safe_path?(path, destination_dir)
+    VCAP::CloudController::FilePathChecker.safe_path?(path, destination_dir)
   end
 
   def empty_directory?(dir)

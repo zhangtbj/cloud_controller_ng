@@ -96,6 +96,41 @@ RSpec.describe AppPackager do
               expect(File.exist?("#{@tmpdir}/a/b1/c11")).to be true
             end
           end
+
+          context 'simple express zips should be fine' do
+            let(:input_zip) { File.join(Paths::FIXTURES, 'express-app-good.zip') }
+
+            it 'unzips them correctly without errors' do
+              app_packager.unzip(@tmpdir)
+              expect(File.symlink?("#{@tmpdir}/express-app/node_modules/bin/mime")).to be true
+              expect(File.exist?("#{@tmpdir}/express-app/node_modules/mime/cli.js")).to be true
+              expect(File.exist?("#{@tmpdir}/express-app/node_modules/bin/mime")).to be true
+            end
+          end
+
+          context 'zip with symlinks that live outside the zipfile root and points outside should be bad' do
+            let(:input_zip) { File.join(Paths::FIXTURES, 'bad-symlink-lives-outside-ziproot-points-out.zip') }
+
+            it 'raises an exception' do
+              expect { app_packager.unzip(@tmpdir) }.to raise_exception(CloudController::Errors::ApiError, /symlink.+outside/i)
+            end
+          end
+
+          context 'zip with symlinks that live outside the zipfile root but points in should be bad' do
+            let(:input_zip) { File.join(Paths::FIXTURES, 'bad-symlink-lives-outside-ziproot-points-in.zip') }
+
+            it 'raises an exception' do
+              expect { app_packager.unzip(@tmpdir) }.to raise_exception(CloudController::Errors::ApiError, /symlink.+outside/i)
+            end
+          end
+
+          context 'zip with symlinks that live outside the zipfile root and point out of it should be bad' do
+            let(:input_zip) { File.join(Paths::FIXTURES, 'bad-symlink-lives-outside-ziproot-points-out.zip') }
+
+            it 'raises an exception' do
+              expect { app_packager.unzip(@tmpdir) }.to raise_exception(CloudController::Errors::ApiError, /symlink.+outside/i)
+            end
+          end
         end
       end
 
