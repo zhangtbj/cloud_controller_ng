@@ -75,6 +75,14 @@ module VCAP
             isolation_segment.organizations.any? { |org| can_read_from_org?(org.guid) }
         end
 
+        def readable_space_guids
+          perm_client.list_resource_patterns(
+            user_id: user_id,
+            issuer: issuer,
+            permissions: ['space.developer', 'space.manager', 'space.auditor', 'org.manager']
+          )
+        end
+
         private
 
         attr_reader :perm_client, :user_id, :roles, :issuer

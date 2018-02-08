@@ -117,6 +117,12 @@ module VCAP::CloudController
         end
       end
 
+      def list_resource_patterns(user_id:, issuer:, permissions:)
+        permissions.map { |p| list_resource_patterns_for_permission(user_id: user_id, issuer: issuer, permission_name: p) }.
+          flatten.
+          uniq
+      end
+
       private
 
       attr_reader :hostname, :port, :enabled, :trusted_cas, :logger_name, :timeout
@@ -202,6 +208,39 @@ module VCAP::CloudController
           rescue StandardError => e
             logger.error('unassign-role.failed', role: role, message: e.message)
           end
+        end
+      end
+
+      def list_resource_patterns_for_permission(user_id:, issuer:, permission_name:)
+        if enabled
+          begin
+            client.list_resource_patterns(actor_id: user_id, issuer: issuer, permission_name: permission_name)
+          rescue CloudFoundry::Perm::V1::Errors::BadStatus => e
+            logger.error(
+              'list-resource-patterns.bad-status',
+              user_id: user_id,
+              issuer: issuer,
+              permission_name: permission_name,
+              status: e.class.to_s,
+              code: e.code,
+              details: e.details,
+              metadata: e.metadata
+            )
+
+            []
+          rescue StandardError => e
+            logger.error(
+              'list-resource-patterns.failed',
+              user_id: user_id,
+              issuer: issuer,
+              permission_name: permission_name,
+              message: e.message
+            )
+
+            []
+          end
+        else
+          []
         end
       end
 

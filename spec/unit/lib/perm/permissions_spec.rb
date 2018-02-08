@@ -386,5 +386,18 @@ module VCAP::CloudController::Perm
         expect(has_permission).to equal(false)
       end
     end
+
+    describe '#readable_space_guids' do
+      it 'returns the list of space guids that the user can read' do
+        readable_space_guids = [SecureRandom.uuid, SecureRandom.uuid]
+
+        permission_names = ['space.developer', 'space.manager', 'space.auditor', 'org.manager']
+        allow(perm_client).to receive(:list_resource_patterns).
+          with(user_id: user_id, issuer: issuer, permissions: permission_names).
+          and_return(readable_space_guids)
+
+        expect(permissions.readable_space_guids).to match_array(readable_space_guids)
+      end
+    end
   end
 end

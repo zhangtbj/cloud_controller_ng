@@ -654,5 +654,93 @@ module VCAP::CloudController::Perm
           anything).twice
       end
     end
+
+    describe '#list_resource_patterns' do
+      let(:permission1) { 'permission1' }
+      let(:permission2) { 'permission2' }
+      let(:permissions) { [permission1, permission2] }
+
+      it 'returns a de-duped list of all resource patterns for the specified permissions' do
+        duplicated_resource_pattern = SecureRandom.uuid
+        permission1_resource_patterns = [SecureRandom.uuid, duplicated_resource_pattern]
+        permission2_resource_patterns = [SecureRandom.uuid, SecureRandom.uuid, duplicated_resource_pattern]
+
+        allow(client).to receive(:list_resource_patterns).
+          and_return([])
+        allow(client).to receive(:list_resource_patterns).
+          with(actor_id: user_id, issuer: issuer, permission_name: permission1).
+          and_return(permission1_resource_patterns)
+        allow(client).to receive(:list_resource_patterns).
+          with(actor_id: user_id, issuer: issuer, permission_name: permission2).
+          and_return(permission2_resource_patterns)
+
+        resource_patterns = subject.list_resource_patterns(
+          user_id: user_id,
+          issuer: issuer,
+          permissions: permissions
+        )
+        expected_resource_patterns = permission1_resource_patterns.concat(permission2_resource_patterns).flatten.uniq
+
+        expect(resource_patterns).to match_array(expected_resource_patterns)
+      end
+
+      it 'returns an empty list if disabled' do
+        resource_patterns = disabled_subject.list_resource_patterns(
+          user_id: user_id,
+          issuer: issuer,
+          permissions: permissions
+        )
+
+        expect(resource_patterns).to match_array([])
+
+        expect(client).not_to have_received(:list_resource_patterns)
+      end
+
+      it 'logs Perm errors and returns an empty list' do
+        allow(client).to receive(:list_resource_patterns).
+          and_raise(CloudFoundry::Perm::V1::Errors::BadStatus, 'fake-message')
+
+        resource_patterns = subject.list_resource_patterns(
+          user_id: user_id,
+          issuer: issuer,
+          permissions: permissions
+        )
+
+        expect(resource_patterns).to match_array([])
+        permissions.each do |p|
+          expect(logger).to have_received(:error).with(
+            'list-resource-patterns.bad-status',
+            user_id: user_id,
+            issuer: issuer,
+            permission_name: p,
+            status: 'CloudFoundry::Perm::V1::Errors::BadStatus',
+            code: anything,
+            details: anything,
+            metadata: anything
+          )
+        end
+      end
+
+      it 'logs all other errors and returns an empty list' do
+        allow(client).to receive(:list_resource_patterns).and_raise(StandardError)
+
+        resource_patterns = subject.list_resource_patterns(
+          user_id: user_id,
+          issuer: issuer,
+          permissions: permissions
+        )
+
+        expect(resource_patterns).to match_array([])
+        permissions.each do |p|
+          expect(logger).to have_received(:error).with(
+            'list-resource-patterns.failed',
+            user_id: user_id,
+            issuer: issuer,
+            permission_name: p,
+            message: anything
+          )
+        end
+      end
+    end
   end
 end
