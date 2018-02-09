@@ -88,6 +88,19 @@ module VCAP
           readable_space_guids_from_org_roles.concat(readable_space_guids_from_space_roles)
         end
 
+        def readable_org_guids
+          perm_client.list_resource_patterns(
+            user_id: user_id,
+            issuer: issuer,
+            permissions: [
+              ORG_MANAGER_PERMISSION,
+              ORG_BILLING_MANAGER_PERMISSION,
+              ORG_AUDITOR_PERMISSION,
+              ORG_USER_PERMISSION
+            ]
+          )
+        end
+
         private
 
         attr_reader :perm_client, :user_id, :roles, :issuer

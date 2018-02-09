@@ -417,5 +417,18 @@ module VCAP::CloudController::Perm
         expect(permissions.readable_space_guids).to match_array(expected_space_guids)
       end
     end
+
+    describe '#readable_org_guids' do
+      it 'returns the list of org guids that the user can read' do
+        readable_org_guids = [SecureRandom.uuid, SecureRandom.uuid]
+
+        permission_names = ['org.manager', 'org.auditor', 'org.member', 'org.billing_manager']
+        allow(perm_client).to receive(:list_resource_patterns).
+          with(user_id: user_id, issuer: issuer, permissions: permission_names).
+          and_return(readable_org_guids)
+
+        expect(permissions.readable_org_guids).to match_array(readable_org_guids)
+      end
+    end
   end
 end
