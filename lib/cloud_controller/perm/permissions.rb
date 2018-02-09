@@ -85,7 +85,7 @@ module VCAP
         end
 
         def readable_space_guids
-          readable_space_guids_from_org_roles.concat(readable_space_guids_from_space_roles)
+          readable_space_guids_from_space_roles
         end
 
         def readable_org_guids
@@ -132,10 +132,7 @@ module VCAP
             user_id: user_id,
             issuer: issuer,
             permissions: [
-              SPACE_DEVELOPER_PERMISSION,
-              SPACE_MANAGER_PERMISSION,
-              SPACE_AUDITOR_PERMISSION,
-              ORG_MANAGER_PERMISSION
+              SPACE_DEVELOPER_PERMISSION
             ]
           )
         end
