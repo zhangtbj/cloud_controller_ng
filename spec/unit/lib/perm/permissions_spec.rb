@@ -388,15 +388,33 @@ module VCAP::CloudController::Perm
     end
 
     describe '#readable_space_guids' do
-      it 'returns the list of space guids that the user can read' do
-        readable_space_guids = [SecureRandom.uuid, SecureRandom.uuid]
+      it 'returns the list of space guids that the user can read via space roles and as an org manager' do
+        org1 = VCAP::CloudController::Organization.create(name: 'org1')
+        org2 = VCAP::CloudController::Organization.create(name: 'org2')
+        managed_org_guids = [org1.guid, org2.guid]
 
-        permission_names = ['space.developer', 'space.manager', 'space.auditor', 'org.manager']
+        space1 = VCAP::CloudController::Space.create(name: 'space1', organization: org1)
+        space2 = VCAP::CloudController::Space.create(name: 'space2', organization: org1)
+        space3 = VCAP::CloudController::Space.create(name: 'space3', organization: org2)
+        space4 = VCAP::CloudController::Space.create(name: 'space4', organization: org2)
+
+        managed_space_guids = [space1.guid, space2.guid, space3.guid, space4.guid]
+        org_permission_names = %w(org.manager)
+
         allow(perm_client).to receive(:list_resource_patterns).
-          with(user_id: user_id, issuer: issuer, permissions: permission_names).
+          with(user_id: user_id, issuer: issuer, permissions: org_permission_names).
+          and_return(managed_org_guids)
+
+        readable_space_guids = [SecureRandom.uuid, SecureRandom.uuid]
+        org_permission_names = %w(space.developer space.manager space.auditor)
+
+        allow(perm_client).to receive(:list_resource_patterns).
+          with(user_id: user_id, issuer: issuer, permissions: org_permission_names).
           and_return(readable_space_guids)
 
-        expect(permissions.readable_space_guids).to match_array(readable_space_guids)
+        expected_space_guids = managed_space_guids.concat(readable_space_guids)
+
+        expect(permissions.readable_space_guids).to match_array(expected_space_guids)
       end
     end
   end

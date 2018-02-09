@@ -62,7 +62,7 @@ module VCAP
           can_read_globally? || has_any_permission?(permissions)
         end
 
-        def can_see_secrets_in_space?(space_id, org_id)
+        def can_see_secrets_in_space?(space_id, _)
           permissions = [
             { permission_name: SPACE_DEVELOPER_PERMISSION, resource_id: space_id },
           ]
@@ -85,16 +85,7 @@ module VCAP
         end
 
         def readable_space_guids
-          perm_client.list_resource_patterns(
-            user_id: user_id,
-            issuer: issuer,
-            permissions: [
-              SPACE_DEVELOPER_PERMISSION,
-              SPACE_MANAGER_PERMISSION,
-              SPACE_AUDITOR_PERMISSION,
-              ORG_MANAGER_PERMISSION,
-            ]
-          )
+          readable_space_guids_from_org_roles.concat(readable_space_guids_from_space_roles)
         end
 
         private
@@ -103,6 +94,37 @@ module VCAP
 
         def has_any_permission?(permissions)
           perm_client.has_any_permission?(permissions: permissions, user_id: user_id, issuer: issuer)
+        end
+
+        def readable_space_guids_from_org_roles
+          org_guids = perm_client.list_resource_patterns(
+            user_id: user_id,
+            issuer: issuer,
+            permissions: [ORG_MANAGER_PERMISSION]
+          )
+          org_ids = Organization.select(:id).
+            where(guid: org_guids).
+            all.
+            reject(&:nil?).
+            map(&:id)
+
+          Space.select(:guid).
+            where(organization_id: org_ids).
+            reject(&:nil?).
+            map(&:guid)
+        end
+
+        def readable_space_guids_from_space_roles
+          perm_client.list_resource_patterns(
+            user_id: user_id,
+            issuer: issuer,
+            permissions: [
+              SPACE_DEVELOPER_PERMISSION,
+              SPACE_MANAGER_PERMISSION,
+              SPACE_AUDITOR_PERMISSION,
+              ORG_MANAGER_PERMISSION
+            ]
+          )
         end
       end
     end
