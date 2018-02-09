@@ -15,7 +15,7 @@ class AppPackager
 
   def unzip(destination_dir)
     raise CloudController::Errors::ApiError.new_from_details('AppBitsUploadInvalid', 'Destination does not exist') unless File.directory?(destination_dir)
-    raise CloudController::Errors::ApiError.new_from_details('AppBitsUploadInvalid', 'Symlink(s) point outside of root folder') if any_outside_symlinks?(destination_dir)
+    raise CloudController::Errors::ApiError.new_from_details('AppBitsUploadInvalid', 'Symlink(s) point outside of root folder') if any_unsafe_symlinks?(destination_dir)
 
     output, error, status = Open3.capture3(
       %(unzip -qq -n #{Shellwords.escape(@path)} -d #{Shellwords.escape(destination_dir)})
@@ -81,29 +81,28 @@ class AppPackager
     end
   end
 
-  def any_outside_symlinks?(destination_dir)
+  def any_unsafe_symlinks?(destination_dir)
     Zip::File.open(@path) do |in_zip|
-      in_zip.any? { |entry| is_unsafe_symlink?(destination_dir, in_zip, entry) }
+      in_zip.any? { |entry| symlink?(entry) && is_unsafe_symlink?(destination_dir, in_zip, entry) }
     end
   rescue Zip::Error
     invalid_zip!
   end
 
   def is_unsafe_symlink?(destination_dir, in_zip, entry)
-    return false if !symlink?(entry)
-
-    link_final_path = File.expand_path(entry.name, destination_dir)
     # All bets are off if there's a symlink sitting outside the zipfile root
-    return true if !link_final_path.starts_with?(destination_dir)
+    return true if !safe_path?(entry.name, destination_dir)
 
     target_path = in_zip.file.read(entry.name)
     parent_dir = entry.parent_as_string
     if parent_dir
+      # This code handles the case where the link and the target can both be relative,
+      # and it calculates the actual final location of the target.
+
       base_dir = File.expand_path(parent_dir, destination_dir)
-      # If the symbolic link LINK lives outside the zip directory it will end up at the root
       final_path = File.expand_path(target_path, base_dir)
     else
-      # Not sure if we can have a symbolic link without a parent_dir entry
+      # parent_dir is nil when the link and target are in the same directory
       final_path = File.expand_path(target_path, destination_dir)
     end
     !final_path.starts_with?(destination_dir)

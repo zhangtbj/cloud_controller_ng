@@ -74,49 +74,65 @@ RSpec.describe AppPackager do
     describe 'symlinks' do
       context 'when valid' do
         context 'when the zip contains a symlink that does not leave the root dir' do
-          context 'symbolic links point downwards' do
-            let(:input_zip) { File.join(Paths::FIXTURES, 'good_symlinks.zip') }
-
-            it 'unzips them correctly without errors' do
-              app_packager.unzip(@tmpdir)
-              expect(File.symlink?("#{@tmpdir}/what")).to be true
-              expect(File.readlink("#{@tmpdir}/what")).to eq 'box/jack'
-            end
-          end
-
-          context 'symbolic links point upwards (start with "..")' do
-            let(:input_zip) { File.join(Paths::FIXTURES, 'multi_dot_dot_symlinks.zip') }
-
-            it 'unzips them correctly without errors' do
-              app_packager.unzip(@tmpdir)
-              expect(File.symlink?("#{@tmpdir}/a/b2/c21")).to be true
-              expect(File.symlink?("#{@tmpdir}/a/b2/c22")).to be true
-              expect(File.symlink?("#{@tmpdir}/a/b2/c33")).to be true
-              expect(File.exist?("#{@tmpdir}/a/b1/c11")).to be true
-              expect(File.exist?("#{@tmpdir}/a/b1/c11")).to be true
-            end
-          end
-
           context 'simple express zips should be fine' do
             let(:input_zip) { File.join(Paths::FIXTURES, 'express-app-good.zip') }
 
             it 'unzips them correctly without errors' do
               app_packager.unzip(@tmpdir)
+
               expect(File.symlink?("#{@tmpdir}/express-app/node_modules/bin/mime")).to be true
               expect(File.exist?("#{@tmpdir}/express-app/node_modules/mime/cli.js")).to be true
               expect(File.exist?("#{@tmpdir}/express-app/node_modules/bin/mime")).to be true
+
+              expect(File.symlink?("#{@tmpdir}/link-same-dir.txt")).to be true
+              expect(File.readlink("#{@tmpdir}/link-same-dir.txt")).to eq('target2.txt')
+
+              expect(File.symlink?("#{@tmpdir}/express-app/node_modules/bin/link-up-down.txt")).to be true
+              expect(File.readlink("#{@tmpdir}/express-app/node_modules/bin/link-up-down.txt")).to eq '../mime/cli.js'
+
+              expect(File.symlink?("#{@tmpdir}/express-app/node_modules/bin/link2-up-dirs.txt")).to be true
+              expect(File.readlink("#{@tmpdir}/express-app/node_modules/bin/link2-up-dirs.txt")).to eq('../../target1.txt')
+
+              expect(File.symlink?("#{@tmpdir}/express-app/link3-down-dirs.txt")).to be true
+              expect(File.readlink("#{@tmpdir}/express-app/link3-down-dirs.txt")).to eq('node_modules/mime/cli.js')
             end
           end
 
-          context 'zip with symlinks that live outside the zipfile root and points outside should be bad' do
-            let(:input_zip) { File.join(Paths::FIXTURES, 'bad-symlink-lives-outside-ziproot-points-out.zip') }
+          context 'symbolic links contain sub-parts that will be removed (like "../X/<MORE_DIRECTORIES>") ' do
+            let(:input_zip) { File.join(Paths::FIXTURES, 'multi_dot_dot_symlinks.zip') }
 
-            it 'raises an exception' do
-              expect { app_packager.unzip(@tmpdir) }.to raise_exception(CloudController::Errors::ApiError, /symlink.+outside/i)
+            it 'unzips them correctly without errors' do
+              app_packager.unzip(@tmpdir)
+              expect(File.symlink?("#{@tmpdir}/a/b2/c23")).to be true
+              expect(File.readlink("#{@tmpdir}/a/b2/c23")).to eq('../x1/../x2/../../a/x3/../b1/c13')
             end
           end
+        end
+      end
 
-          context 'zip with symlinks that live outside the zipfile root but points in should be bad' do
+      context 'when invalid' do
+        context 'when the zip contains a symlink that lives inside the zipfile root' do
+          context 'when the the symlink points to a file out of the root dir' do
+            context 'when the symlink is relative' do
+              let(:input_zip) { File.join(Paths::FIXTURES, 'bad_symlinks.zip') }
+
+              it 'raises an exception' do
+                expect { app_packager.unzip(@tmpdir) }.to raise_exception(CloudController::Errors::ApiError, /symlink.+outside/i)
+              end
+            end
+
+            context 'when the symlink is absolute' do
+              let(:input_zip) { File.join(Paths::FIXTURES, 'absolute_symlink_out_of_parent.zip') }
+
+              it 'raises an exception' do
+                expect { app_packager.unzip(@tmpdir) }.to raise_exception(CloudController::Errors::ApiError, /symlink.+outside/i)
+              end
+            end
+          end
+        end
+
+        context 'when the zip contains a symlink that lives outside the zipfile root' do
+          context 'when the symlink points back into the zipfile root' do
             let(:input_zip) { File.join(Paths::FIXTURES, 'bad-symlink-lives-outside-ziproot-points-in.zip') }
 
             it 'raises an exception' do
@@ -124,28 +140,8 @@ RSpec.describe AppPackager do
             end
           end
 
-          context 'zip with symlinks that live outside the zipfile root and point out of it should be bad' do
+          context 'when the symlink points out of the zipfile root' do
             let(:input_zip) { File.join(Paths::FIXTURES, 'bad-symlink-lives-outside-ziproot-points-out.zip') }
-
-            it 'raises an exception' do
-              expect { app_packager.unzip(@tmpdir) }.to raise_exception(CloudController::Errors::ApiError, /symlink.+outside/i)
-            end
-          end
-        end
-      end
-
-      context 'when invalid' do
-        context 'when the zip contains a symlink pointing to a file out of the root dir' do
-          context 'when the symlink is relative' do
-            let(:input_zip) { File.join(Paths::FIXTURES, 'bad_symlinks.zip') }
-
-            it 'raises an exception' do
-              expect { app_packager.unzip(@tmpdir) }.to raise_exception(CloudController::Errors::ApiError, /symlink.+outside/i)
-            end
-          end
-
-          context 'when the symlink is absolute' do
-            let(:input_zip) { File.join(Paths::FIXTURES, 'absolute_symlink_out_of_parent.zip') }
 
             it 'raises an exception' do
               expect { app_packager.unzip(@tmpdir) }.to raise_exception(CloudController::Errors::ApiError, /symlink.+outside/i)
