@@ -685,6 +685,34 @@ module VCAP::CloudController
         end
       end
 
+      context 'when the control and candidate are the same but in a different order' do
+        it 'logs the result' do
+          space_guid1 = SecureRandom.uuid
+          space_guid2 = SecureRandom.uuid
+          space_guids_control_order = [space_guid1, space_guid2]
+          space_guids_candidate_order = [space_guid2, space_guid1]
+
+          allow(db_permissions).to receive(:readable_space_guids).and_return(space_guids_control_order)
+          allow(perm_permissions).to receive(:readable_space_guids).and_return(space_guids_candidate_order)
+
+          queryer.readable_space_guids
+
+          expected_context = {
+            current_user_guid: 'some-current-user',
+            action: 'space.read',
+          }
+
+          expect(logger).to have_received(:debug).with(
+            'matched',
+            {
+              context: expected_context,
+              control: { value: space_guids_control_order },
+              candidate: { value: space_guids_candidate_order },
+            }
+          )
+        end
+      end
+
       context 'when the control and candidate are different' do
         it 'logs the result' do
           control_space_guids = [SecureRandom.uuid, SecureRandom.uuid]
@@ -769,6 +797,35 @@ module VCAP::CloudController
               context: expected_context,
               control: { value: org_guids },
               candidate: { value: org_guids },
+            }
+          )
+        end
+      end
+
+      context 'when the control and candidate are the same but in a different order' do
+        it 'logs the result' do
+          org_guid1 = SecureRandom.uuid
+          org_guid2 = SecureRandom.uuid
+
+          org_guids_control_order = [org_guid1, org_guid2]
+          org_guids_candidate_order = [org_guid2, org_guid1]
+
+          allow(db_permissions).to receive(:readable_org_guids).and_return(org_guids_control_order)
+          allow(perm_permissions).to receive(:readable_org_guids).and_return(org_guids_candidate_order)
+
+          queryer.readable_org_guids
+
+          expected_context = {
+            current_user_guid: 'some-current-user',
+            action: 'org.read',
+          }
+
+          expect(logger).to have_received(:debug).with(
+            'matched',
+            {
+              context: expected_context,
+              control: { value: org_guids_control_order },
+              candidate: { value: org_guids_candidate_order },
             }
           )
         end

@@ -117,6 +117,10 @@ class VCAP::CloudController::Permissions::Queryer
       e.use { db_permissions.readable_space_guids }
       e.try { perm_permissions.readable_space_guids }
 
+      e.compare do |control, candidate|
+        control.sort == candidate.sort
+      end
+
       e.run_if { !db_permissions.can_read_globally? }
     end
   end
@@ -127,6 +131,10 @@ class VCAP::CloudController::Permissions::Queryer
 
       e.use { db_permissions.readable_org_guids }
       e.try { perm_permissions.readable_org_guids }
+
+      e.compare do |control, candidate|
+        control.sort == candidate.sort
+      end
 
       e.run_if { !db_permissions.can_read_globally? }
     end
