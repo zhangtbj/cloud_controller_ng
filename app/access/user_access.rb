@@ -10,6 +10,7 @@ module VCAP::CloudController
     def read?(user)
       return true if admin_user? || admin_read_only_user?
       return false if context.user.nil?
+
       user.guid == context.user.guid
     end
   end

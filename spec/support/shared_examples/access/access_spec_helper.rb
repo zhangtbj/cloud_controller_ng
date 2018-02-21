@@ -7,8 +7,17 @@ RSpec.shared_examples 'an access control' do |operation, table|
 
         set_current_user_as_role(role: role, org: org_if_defined, space: space_if_defined, user: user)
 
-        actual = subject.can?("#{operation}_with_token".to_sym, object) &&
-          subject.can?(operation, object)
+        actual_with_token = subject.can?("#{operation}_with_token".to_sym, object)
+
+        op_params_if_defined = respond_to?(:op_params) ? op_params : nil
+
+        if op_params_if_defined.present?
+          actual_without_token = subject.can?(operation, object, params=op_params_if_defined)
+        else
+          actual_without_token = subject.can?(operation, object)
+        end
+
+        actual = actual_with_token && actual_without_token
 
         expect(actual).to eq(expected_return_value),
           "role #{role}: expected #{expected_return_value}, got: #{actual}"

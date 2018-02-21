@@ -2,44 +2,157 @@ require 'spec_helper'
 
 module VCAP::CloudController
   RSpec.describe UserAccess, type: :access do
-    subject(:access) { UserAccess.new(Security::AccessContext.new) }
+    subject { UserAccess.new(Security::AccessContext.new) }
+
     let(:object) { VCAP::CloudController::User.make }
     let(:user) { VCAP::CloudController::User.make }
 
-    before { set_current_user(user) }
+    before(:each) {
+      set_current_user(user)
+    }
 
-    it_behaves_like :admin_full_access
-    it_behaves_like :admin_read_only_access
+    index_table = {
+      unauthenticated: false,
+      reader_and_writer: false,
+      reader: false,
+      writer: false,
 
-    context 'a user' do
-      context 'has no_access to other users' do
-        it_behaves_like :no_access
+      admin: true,
+      admin_read_only: true,
+      global_auditor: false,
+    }
+
+    read_table = {
+      unauthenticated: false,
+      reader_and_writer: false,
+      reader: false,
+      writer: false,
+
+      admin: true,
+      admin_read_only: true,
+      global_auditor: true,
+    }
+
+    write_table = {
+      unauthenticated: false,
+      reader_and_writer: false,
+      reader: false,
+      writer: false,
+
+      admin: true,
+      admin_read_only: false,
+      global_auditor: false,
+    }
+
+    it_behaves_like('an access control', :create, write_table)
+    it_behaves_like('an access control', :delete, write_table)
+    it_behaves_like('an access control', :read_for_update, write_table)
+    it_behaves_like('an access control', :update, write_table)
+
+    describe '#index?' do
+      describe 'with no related_model' do
+        let(:op_params) { {} }
+
+        index_table = {
+          unauthenticated: false,
+          reader_and_writer: false,
+          reader: false,
+          writer: false,
+
+          admin: true,
+          admin_read_only: true,
+          global_auditor: false,
+        }
+
+        it_behaves_like('an access control', :index, index_table)
       end
 
-      context 'has read access' do
-        let(:user) { object }
-        it { is_expected.not_to allow_op_on_object :create, object }
-        it { is_expected.to allow_op_on_object :read, object }
-        it { is_expected.not_to allow_op_on_object :read_for_update, object }
-        # update only runs if read_for_update succeeds
-        it { is_expected.not_to allow_op_on_object :update, object }
-        it { is_expected.not_to allow_op_on_object :delete, object }
-        it { is_expected.not_to allow_op_on_object :index, object.class }
+      describe 'with Organization as the related_model' do
+        let(:op_params) { { related_model: VCAP::CloudController::Organization } }
+
+        index_table = {
+          unauthenticated: true,
+          reader_and_writer: true,
+          reader: true,
+          writer: true,
+
+          admin: true,
+          admin_read_only: true,
+          global_auditor: true,
+        }
+
+        it_behaves_like('an access control', :index, index_table)
+      end
+
+      describe 'with Space as the related_model' do
+        let(:op_params) { { related_model: VCAP::CloudController::Space } }
+
+        index_table = {
+          unauthenticated: true,
+          reader_and_writer: true,
+          reader: true,
+          writer: true,
+
+          admin: true,
+          admin_read_only: true,
+          global_auditor: true,
+        }
+
+        it_behaves_like('an access control', :index, index_table)
+      end
+
+      describe 'with something else as the related_model' do
+        let(:op_params) { { related_model: VCAP::CloudController::User } }
+
+        index_table = {
+          unauthenticated: false,
+          reader_and_writer: false,
+          reader: false,
+          writer: false,
+
+          admin: true,
+          admin_read_only: true,
+          global_auditor: false,
+        }
+
+        it_behaves_like('an access control', :index, index_table)
       end
     end
 
-    context 'for a non-logged in user' do
-      let(:user) { nil }
+    describe '#read?' do
+      describe 'when the user is requesting their own profile' do
+        let(:object) { user }
+        let(:context) { spy(Security::AccessContext) }
 
-      it_behaves_like :no_access
-      it { should_not allow_op_on_object :index, object.class }
-    end
+        subject { UserAccess.new(context) }
 
-    context 'any user using client without cloud_controller.read' do
-      before { set_current_user(user, scopes: []) }
+        before(:each) {
+          allow(context).to receive(:user).and_return(user)
+        }
 
-      it_behaves_like :no_access
-      it { should_not allow_op_on_object :index, object.class }
+        read_table = {
+          reader_and_writer: true,
+          reader: true,
+          writer: true,
+        }
+
+        it_behaves_like('an access control', :read, read_table)
+      end
+
+      describe 'when the user is requesting a different profile' do
+        read_table = {
+          unauthenticated: false,
+          reader_and_writer: false,
+          reader: false,
+          writer: false,
+
+          admin: true,
+          admin_read_only: true,
+          global_auditor: false,
+        }
+
+        it_behaves_like('an access control', :read, read_table)
+      end
     end
   end
 end
