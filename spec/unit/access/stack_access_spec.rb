@@ -8,23 +8,44 @@ module VCAP::CloudController
 
     before { set_current_user(user) }
 
-    it_behaves_like :admin_full_access
-    it_behaves_like :admin_read_only_access
+    index_table = {
+      unauthenticated: true,
+      reader_and_writer: true,
+      reader: true,
+      writer: true,
 
-    context 'a logged in user' do
-      it_behaves_like :read_only_access
-    end
+      admin: true,
+      admin_read_only: true,
+      global_auditor: true,
+    }
 
-    context 'a user that isnt logged in (defensive)' do
-      let(:user) { nil }
+    read_table = {
+      unauthenticated: false,
+      reader_and_writer: true,
+      reader: true,
+      writer: false,
 
-      it_behaves_like :no_access
-    end
+      admin: true,
+      admin_read_only: true,
+      global_auditor: true,
+    }
 
-    context 'any user using client without cloud_controller.read' do
-      before { set_current_user(user, scopes: []) }
+    write_table = {
+      unauthenticated: false,
+      reader_and_writer: false,
+      reader: false,
+      writer: false,
 
-      it_behaves_like :no_access
-    end
+      admin: true,
+      admin_read_only: false,
+      global_auditor: false,
+    }
+
+    it_behaves_like('an access control', :create, write_table)
+    it_behaves_like('an access control', :delete, write_table)
+    it_behaves_like('an access control', :index, index_table)
+    it_behaves_like('an access control', :read, read_table)
+    it_behaves_like('an access control', :read_for_update, write_table)
+    it_behaves_like('an access control', :update, write_table)
   end
 end
