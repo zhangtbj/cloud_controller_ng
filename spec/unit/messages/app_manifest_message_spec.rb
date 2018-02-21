@@ -4,7 +4,7 @@ require 'messages/app_manifests/app_manifest_message'
 module VCAP::CloudController
   RSpec.describe AppManifestMessage do
     context 'when unexpected keys are requested' do
-      let(:params) { { instances: 3, name: 'foo' } }
+      let(:params) { { instances: 3, name: 'foo', meowmeowe: '123KB' } }
 
       it 'is valid' do
         message = AppManifestMessage.new(params)
