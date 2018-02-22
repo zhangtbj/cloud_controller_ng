@@ -99,9 +99,9 @@ module UserHelpers
     when 'unauthenticated'
       set_current_user_as_unauthenticated
     when 'reader_and_writer'
-      set_current_user_as_reader_and_writer(user: current_user)
+      set_current_user_as_reader_and_writer
     when 'reader'
-      set_current_user_as_reader_and_writer(user: current_user)
+      set_current_user_as_reader
     when 'writer'
       set_current_user_as_writer
     else
