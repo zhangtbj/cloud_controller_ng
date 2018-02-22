@@ -7,41 +7,140 @@ module VCAP::CloudController
     let!(:service_plan) { VCAP::CloudController::ServicePlan.make(service: object) }
     let(:object) { VCAP::CloudController::Service.make }
 
-    it_behaves_like :admin_full_access
-    it_behaves_like :admin_read_only_access
+    describe 'when the broker for the service is space-scoped' do
+      let(:org) { Organization.make }
+      let(:space) { Space.make(organization: org) }
 
-    context 'for a logged in user' do
-      before { set_current_user(user) }
-
-      it_behaves_like :read_only_access
-    end
-
-    context 'any user using client without cloud_controller.read' do
-      before { set_current_user(user, scopes: []) }
-
-      it_behaves_like :no_access
-    end
-
-    context 'space developer' do
-      let(:space) { Space.make }
-
-      before do
-        set_current_user(user)
-        space.organization.add_user user
-        space.add_developer user
+      before(:each) do
+        broker = object.service_broker
+        broker.space = space
+        broker.save
       end
 
-      it_behaves_like :read_only_access
+      index_table = {
+        unauthenticated: true,
+        reader_and_writer: true,
+        reader: true,
+        writer: true,
 
-      context 'when the broker for the service is space scoped' do
-        before do
-          broker = object.service_broker
-          broker.space = space
-          broker.save
-        end
+        admin: true,
+        admin_read_only: true,
+        global_auditor: true,
 
-        it { is_expected.to allow_op_on_object :delete, object }
-      end
+        space_developer: true,
+        space_manager: true,
+        space_auditor: true,
+        org_user: true,
+        org_manager: true,
+        org_auditor: true,
+        org_billing_manager: true,
+      }
+
+      read_table = {
+        unauthenticated: false,
+        reader_and_writer: true,
+        reader: true,
+        writer: false,
+
+        admin: true,
+        admin_read_only: true,
+        global_auditor: true,
+
+        space_developer: true,
+        space_manager: true,
+        space_auditor: true,
+        org_user: true,
+        org_manager: true,
+        org_auditor: true,
+        org_billing_manager: true,
+      }
+
+      write_table = {
+        unauthenticated: false,
+        reader_and_writer: false,
+        reader: false,
+        writer: false,
+
+        admin: true,
+        admin_read_only: false,
+        global_auditor: false,
+
+        space_developer: false,
+        space_manager: false,
+        space_auditor: false,
+        org_user: false,
+        org_manager: false,
+        org_auditor: false,
+        org_billing_manager: false,
+      }
+
+      delete_table = {
+        unauthenticated: false,
+        reader_and_writer: false,
+        reader: false,
+        writer: false,
+
+        admin: true,
+        admin_read_only: false,
+        global_auditor: false,
+
+        space_developer: true,
+        space_manager: false,
+        space_auditor: false,
+        org_user: false,
+        org_manager: false,
+        org_auditor: false,
+        org_billing_manager: false,
+      }
+
+      it_behaves_like('an access control', :create, write_table)
+      it_behaves_like('an access control', :delete, delete_table)
+      it_behaves_like('an access control', :index, index_table)
+      it_behaves_like('an access control', :read, read_table)
+      it_behaves_like('an access control', :read_for_update, write_table)
+      it_behaves_like('an access control', :update, write_table)
+    end
+
+    describe 'when the broker for the service is not space-scoped' do
+      index_table = {
+        unauthenticated: true,
+        reader_and_writer: true,
+        reader: true,
+        writer: true,
+
+        admin: true,
+        admin_read_only: true,
+        global_auditor: true,
+      }
+
+      read_table = {
+        unauthenticated: false,
+        reader_and_writer: true,
+        reader: true,
+        writer: false,
+
+        admin: true,
+        admin_read_only: true,
+        global_auditor: true,
+      }
+
+      write_table = {
+        unauthenticated: false,
+        reader_and_writer: false,
+        reader: false,
+        writer: false,
+
+        admin: true,
+        admin_read_only: false,
+        global_auditor: false,
+      }
+
+      it_behaves_like('an access control', :create, write_table)
+      it_behaves_like('an access control', :delete, write_table)
+      it_behaves_like('an access control', :index, index_table)
+      it_behaves_like('an access control', :read, read_table)
+      it_behaves_like('an access control', :read_for_update, write_table)
+      it_behaves_like('an access control', :update, write_table)
     end
   end
 end
