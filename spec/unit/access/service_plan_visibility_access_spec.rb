@@ -13,35 +13,59 @@ module VCAP::CloudController
 
     before { set_current_user(user) }
 
-    it_behaves_like :admin_full_access
-    it_behaves_like :admin_read_only_access
+    index_table = {
+      unauthenticated: true,
+      reader_and_writer: true,
+      reader: true,
+      writer: true,
 
-    context 'for a logged in user (defensive)' do
-      it_behaves_like :no_access
-    end
+      admin: true,
+      admin_read_only: true,
+      global_auditor: true,
 
-    context 'a user that isnt logged in (defensive)' do
-      let(:user) { nil }
+      org_user: true,
+      org_manager: true,
+      org_auditor: true,
+      org_billing_manager: true,
+    }
 
-      it_behaves_like :no_access
-    end
+    read_table = {
+      unauthenticated: false,
+      reader_and_writer: false,
+      reader: false,
+      writer: false,
 
-    context 'organization manager (defensive)' do
-      before { org.add_manager(user) }
+      admin: true,
+      admin_read_only: true,
+      global_auditor: true,
 
-      it_behaves_like :no_access
-    end
+      org_user: false,
+      org_manager: false,
+      org_auditor: false,
+      org_billing_manager: false,
+    }
 
-    context 'organization auditor (defensive)' do
-      before { org.add_auditor(user) }
+    write_table = {
+      unauthenticated: false,
+      reader_and_writer: false,
+      reader: false,
+      writer: false,
 
-      it_behaves_like :no_access
-    end
+      admin: true,
+      admin_read_only: false,
+      global_auditor: false,
 
-    context 'organization user (defensive)' do
-      before { org.add_user(user) }
+      org_user: false,
+      org_manager: false,
+      org_auditor: false,
+      org_billing_manager: false,
+    }
 
-      it_behaves_like :no_access
-    end
+    it_behaves_like('an access control', :create, write_table)
+    it_behaves_like('an access control', :delete, write_table)
+    it_behaves_like('an access control', :index, index_table)
+    it_behaves_like('an access control', :read, read_table)
+    it_behaves_like('an access control', :read_for_update, write_table)
+    it_behaves_like('an access control', :update, write_table)
   end
 end
