@@ -8,28 +8,45 @@ module VCAP::CloudController
 
     before { set_current_user(user) }
 
-    it_behaves_like :admin_read_only_access
+    index_table = {
+      unauthenticated: false,
+      reader_and_writer: false,
+      reader: false,
+      writer: false,
 
-    context 'an admin' do
-      include_context :admin_setup
+      admin: true,
+      admin_read_only: true,
+      global_auditor: false,
+    }
 
-      it_behaves_like :full_access
-      it { is_expected.to allow_op_on_object :reset, VCAP::CloudController::ServiceUsageEvent }
-    end
+    read_table = {
+      unauthenticated: false,
+      reader_and_writer: false,
+      reader: false,
+      writer: false,
 
-    context 'a user that is not an admin (defensive)' do
-      it_behaves_like :no_access
+      admin: true,
+      admin_read_only: true,
+      global_auditor: true,
+    }
 
-      it { is_expected.not_to allow_op_on_object :index, VCAP::CloudController::ServiceUsageEvent }
-      it { is_expected.not_to allow_op_on_object :reset, VCAP::CloudController::ServiceUsageEvent }
-    end
+    write_table = {
+      unauthenticated: false,
+      reader_and_writer: false,
+      reader: false,
+      writer: false,
 
-    context 'a user that isnt logged in (defensive)' do
-      let(:user) { nil }
+      admin: true,
+      admin_read_only: false,
+      global_auditor: false,
+    }
 
-      it_behaves_like :no_access
-      it { is_expected.not_to allow_op_on_object :index, VCAP::CloudController::ServiceUsageEvent }
-      it { is_expected.not_to allow_op_on_object :reset, VCAP::CloudController::ServiceUsageEvent }
-    end
+    it_behaves_like('an access control', :create, write_table)
+    it_behaves_like('an access control', :delete, write_table)
+    it_behaves_like('an access control', :index, index_table)
+    it_behaves_like('an access control', :read, read_table)
+    it_behaves_like('an access control', :read_for_update, write_table)
+    it_behaves_like('an access control', :update, write_table)
+    it_behaves_like('an access control', :reset, write_table)
   end
 end
