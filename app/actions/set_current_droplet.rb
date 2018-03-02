@@ -8,11 +8,15 @@ module VCAP::CloudController
       @logger = Steno.logger('cc.action.procfile_parse')
     end
 
-    def update_to(app, droplet)
+    def update_to(app, droplet, type: 'current')
       unable_to_assign! unless droplet.present? && droplet_associated?(app, droplet)
       app_started! if app.desired_state != ProcessModel::STOPPED
 
-      assign_droplet = { droplet_guid: droplet.guid }
+      if type == 'current'
+        assign_droplet = { droplet_guid: droplet.guid }
+      else
+        assign_droplet = { next_droplet_guid: droplet.guid }
+      end
 
       app.db.transaction do
         app.lock!
@@ -26,7 +30,11 @@ module VCAP::CloudController
           assign_droplet
         )
 
-        setup_processes(app)
+        if type == 'current'
+          setup_current_droplet_processes(app)
+        else
+          setup_next_droplet_processes(app)
+        end
 
         app.save
       end
@@ -38,8 +46,12 @@ module VCAP::CloudController
 
     private
 
-    def setup_processes(app)
+    def setup_current_droplet_processes(app)
       CurrentProcessTypes.new(@user_audit_info).process_current_droplet(app)
+    end
+
+    def setup_next_droplet_processes(app)
+      CurrentProcessTypes.new(@user_audit_info).process_next_droplet(app)
     end
 
     def droplet_associated?(app, droplet)

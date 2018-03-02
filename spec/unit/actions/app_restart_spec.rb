@@ -56,6 +56,63 @@ module VCAP::CloudController
       end
 
       context 'when the app is STARTED' do
+        context 'zero downtime' do
+          let(:zdt_app) do
+            AppModel.make(
+              :docker,
+              desired_state:          desired_state,
+              environment_variables:  environment_variables,
+            )
+          end
+          let!(:zdt_process) { ProcessModel.make(:process, state: desired_state, app: zdt_app, instances: 1) }
+
+          context 'with one starting process' do
+            context 'with one instance' do
+              describe 'the scale-up' do
+                it 'duplicates the starting process' do
+                  AppRestart.restart(app: zdt_app, config: config, user_audit_info: user_audit_info)
+
+                  expect(zdt_app.processes.count).to eq(2)
+
+                  duplicate_zdt_process = zdt_app.processes[1]
+
+                  expect(zdt_process.reload.state).to eq('STARTED')
+                  expect(duplicate_zdt_process.state).to eq('STARTED')
+                end
+              end
+
+              describe 'the scale-down' do
+
+              end
+            end
+
+            context 'with multiple instances' do
+
+            end
+          end
+
+          context 'with more than one starting process' do
+
+          end
+
+
+        # it 'restarts the app processes with zero downtime' do
+        #   it 'keeps the app state as STARTED' do
+        #     AppRestart.restart(app: app, config: config, user_audit_info: user_audit_info)
+        #
+        #     expect(runner1).to have_received(:stop).once
+        #     expect(runner1).to have_received(:start).once
+        #     expect(process1.reload.state).to eq('STARTED')
+        #
+        #     expect(runner2).to receive(:stop).once
+        #     expect(runner2).to receive(:start).once
+        #     expect(process2.reload.state).to eq('STARTED')
+        #
+        #     expect(app.reload.desired_state).to eq('STARTED')
+        #   end
+        # end
+        end
+
         it 'keeps the app state as STARTED' do
           AppRestart.restart(app: app, config: config, user_audit_info: user_audit_info)
           expect(app.reload.desired_state).to eq('STARTED')

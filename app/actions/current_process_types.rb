@@ -22,6 +22,18 @@ module VCAP::CloudController
       end
     end
 
+    def process_next_droplet(app)
+      @logger.info('process_next_droplet', guid: app.guid)
+
+      if app.next_droplet && app.next_droplet.process_types
+        @logger.debug('using the droplet process_types', guid: app.guid)
+        evaluate_processes(app, app.next_droplet.process_types)
+      else
+        @logger.warn('no process_types found', guid: app.guid)
+        raise ProcessTypesNotFound
+      end
+    end
+
     private
 
     def evaluate_processes(app, process_types)

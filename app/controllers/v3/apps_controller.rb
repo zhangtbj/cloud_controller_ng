@@ -212,6 +212,30 @@ class AppsV3Controller < ApplicationController
     unprocessable!(e.message)
   end
 
+  def assign_next_droplet
+    app_guid     = params[:guid]
+    droplet_guid = HashUtils.dig(params[:body], 'data', 'guid')
+    cannot_remove_droplet! if params[:body].key?('data') && droplet_guid.nil?
+    # TODO: rename droplet fetcher
+    app, space, org, droplet = AssignCurrentDropletFetcher.new.fetch(app_guid, droplet_guid)
+
+    app_not_found! unless app && can_read?(space.guid, org.guid)
+    unauthorized! unless can_write?(space.guid)
+
+    SetCurrentDroplet.new(user_audit_info).update_to(app, droplet, type: 'next')
+
+    # TODO: remove logic to determine related link URL from the presenter
+    render status: :ok, json: Presenters::V3::AppDropletRelationshipPresenter.new(
+      resource_path:         "apps/#{app_guid}",
+      related_instance:      droplet,
+      relationship_name:     'next_droplet',
+      related_resource_name: 'droplets',
+      app_model:             app
+    )
+  rescue SetCurrentDroplet::InvalidApp, SetCurrentDroplet::Error => e
+    unprocessable!(e.message)
+  end
+
   def current_droplet_relationship
     app, space, org = AppFetcher.new.fetch(params[:guid])
     app_not_found! unless app && can_read?(space.guid, org.guid)

@@ -18,7 +18,13 @@ module VCAP::CloudController
         attr_reader :app_model
 
         def related_link
-          url_builder.build_url(path: "/v3/apps/#{app_model.guid}/droplets/current")
+          if relationship_name.include?('next')
+            relationship_type = 'next'
+          else
+            relationship_type = 'current'
+          end
+
+          url_builder.build_url(path: "/v3/apps/#{app_model.guid}/droplets/#{relationship_type}")
         end
       end
     end

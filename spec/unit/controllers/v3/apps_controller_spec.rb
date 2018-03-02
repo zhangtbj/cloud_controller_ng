@@ -995,6 +995,30 @@ RSpec.describe AppsV3Controller, type: :controller do
     end
   end
 
+  describe '#zdt' do
+    let(:app_model) { VCAP::CloudController::AppModel.make(droplet_guid: droplet.guid) }
+    let(:droplet) { VCAP::CloudController::DropletModel.make(:buildpack, state: VCAP::CloudController::DropletModel::STAGED_STATE) }
+    let(:space) { app_model.space }
+    let(:org) { space.organization }
+    let(:user) { set_current_user(VCAP::CloudController::User.make) }
+
+    before do
+      allow_user_read_access_for(user, spaces: [space])
+      allow_user_write_access(user, space: space)
+      VCAP::CloudController::BuildpackLifecycleDataModel.make(app: app_model, buildpacks: nil, stack: VCAP::CloudController::Stack.default.name)
+    end
+
+    it 'returns a 200 and the app' do
+      put :start, guid: app_model.guid
+
+      response_body = parsed_body
+
+      expect(response.status).to eq 200
+      expect(response_body['guid']).to eq(app_model.guid)
+      expect(response_body['state']).to eq('STARTED')
+    end
+  end
+
   describe '#stop' do
     let(:app_model) { VCAP::CloudController::AppModel.make(droplet_guid: droplet.guid, desired_state: 'STARTED') }
     let(:droplet) { VCAP::CloudController::DropletModel.make(state: VCAP::CloudController::DropletModel::STAGED_STATE) }
@@ -1806,6 +1830,34 @@ RSpec.describe AppsV3Controller, type: :controller do
           expect(response.body).to include 'NotAuthorized'
         end
       end
+    end
+  end
+
+  describe '#assign_next_droplet' do
+    let(:app_model) { VCAP::CloudController::AppModel.make }
+    let(:droplet) { VCAP::CloudController::DropletModel.make(process_types: { 'web' => 'start app' }, state: VCAP::CloudController::DropletModel::STAGED_STATE) }
+    let(:req_body) { { data: { guid: droplet.guid } } }
+    let(:droplet_link) { { 'href' => "#{link_prefix}/v3/apps/#{app_model.guid}/droplets/next" } }
+    let(:space) { app_model.space }
+    let(:org) { space.organization }
+    let(:user) { VCAP::CloudController::User.make }
+
+    before do
+      app_model.add_droplet(droplet)
+      set_current_user(user)
+      allow_user_read_access_for(user, spaces: [space])
+      allow_user_write_access(user, space: space)
+      VCAP::CloudController::BuildpackLifecycleDataModel.make(app: app_model, buildpacks: nil, stack: VCAP::CloudController::Stack.default.name)
+    end
+
+    it 'returns 200 and the droplet guid' do
+      put :assign_next_droplet, guid: app_model.guid, body: req_body
+
+      response_body = parsed_body
+
+      expect(response.status).to eq(200)
+      expect(response_body['data']['guid']).to eq(droplet.guid)
+      expect(response_body['links']['related']).to eq(droplet_link)
     end
   end
 

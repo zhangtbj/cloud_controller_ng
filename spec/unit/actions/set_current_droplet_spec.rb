@@ -19,7 +19,17 @@ module VCAP::CloudController
           app: app_model
         )
       end
+      let(:next_droplet) do
+        DropletModel.make(
+          state: DropletModel::STAGED_STATE,
+          process_types: { web: 'x' },
+          app: app_model
+        )
+      end
+
       let(:droplet_guid) { droplet.guid }
+      let(:next_droplet_guid) { next_droplet.guid }
+
       let(:message) { { 'droplet_guid' => droplet_guid } }
 
       before do
@@ -28,9 +38,15 @@ module VCAP::CloudController
         allow(current_process_types).to receive(:process_current_droplet).with(app_model)
       end
 
-      it 'sets the desired droplet guid' do
+      it 'sets the desired current droplet guid' do
         updated_app = set_current_droplet.update_to(app_model, droplet)
         expect(updated_app.droplet_guid).to eq(droplet_guid)
+        expect(current_process_types).to have_received(:process_current_droplet).once
+      end
+
+      it 'sets the desired next droplet guid' do
+        updated_app = set_current_droplet.update_to(app_model, next_droplet, type: 'next')
+        expect(updated_app.next_droplet_guid).to eq(next_droplet_guid)
         expect(current_process_types).to have_received(:process_current_droplet).once
       end
 
