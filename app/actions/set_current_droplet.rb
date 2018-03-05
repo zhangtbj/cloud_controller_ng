@@ -10,9 +10,9 @@ module VCAP::CloudController
 
     def update_to(app, droplet, type: 'current')
       unable_to_assign! unless droplet.present? && droplet_associated?(app, droplet)
-      app_started! if app.desired_state != ProcessModel::STOPPED
 
       if type == 'current'
+        app_started! if app.desired_state != ProcessModel::STOPPED
         assign_droplet = { droplet_guid: droplet.guid }
       else
         assign_droplet = { next_droplet_guid: droplet.guid }

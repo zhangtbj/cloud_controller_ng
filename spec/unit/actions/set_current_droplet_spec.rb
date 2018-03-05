@@ -36,6 +36,7 @@ module VCAP::CloudController
         app_model.add_droplet_by_guid(droplet_guid)
         allow(CurrentProcessTypes).to receive(:new).with(user_audit_info).and_return(current_process_types)
         allow(current_process_types).to receive(:process_current_droplet).with(app_model)
+        allow(current_process_types).to receive(:process_next_droplet).with(app_model)
       end
 
       it 'sets the desired current droplet guid' do
@@ -47,7 +48,15 @@ module VCAP::CloudController
       it 'sets the desired next droplet guid' do
         updated_app = set_current_droplet.update_to(app_model, next_droplet, type: 'next')
         expect(updated_app.next_droplet_guid).to eq(next_droplet_guid)
-        expect(current_process_types).to have_received(:process_current_droplet).once
+        expect(current_process_types).to have_received(:process_next_droplet).once
+      end
+
+      it 'does not raises an error if the next droplet is being set on a running app' do
+        app_model.update(desired_state: ProcessModel::STARTED)
+
+        expect {
+          set_current_droplet.update_to(app_model, next_droplet, type: 'next')
+        }.not_to raise_error
       end
 
       it 'creates an audit event' do
