@@ -119,6 +119,22 @@ class AppsV3Controller < ApplicationController
     unprocessable!(e.message)
   end
 
+  def zdt_start
+    app, space, org = AppFetcher.new.fetch(params[:guid])
+    app_not_found! unless app && can_read?(space.guid, org.guid)
+    unprocessable_lacking_droplet! unless app.next_droplet
+    unauthorized! unless can_write?(space.guid)
+    if app.droplet.lifecycle_type == DockerLifecycleDataModel::LIFECYCLE_TYPE
+      FeatureFlag.raise_unless_enabled!(:diego_docker)
+    end
+
+    AppStart.start(app: app, user_audit_info: user_audit_info)
+
+    render status: :ok, json: Presenters::V3::AppPresenter.new(app)
+  rescue AppStart::InvalidApp => e
+    unprocessable!(e.message)
+  end
+
   def stop
     app, space, org = AppFetcher.new.fetch(params[:guid])
     app_not_found! unless app && can_read?(space.guid, org.guid)

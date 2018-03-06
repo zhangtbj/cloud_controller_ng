@@ -995,9 +995,10 @@ RSpec.describe AppsV3Controller, type: :controller do
     end
   end
 
-  describe '#zdt' do
-    let(:app_model) { VCAP::CloudController::AppModel.make(droplet_guid: droplet.guid) }
+  describe '#zdt_start' do
+    let(:app_model) { VCAP::CloudController::AppModel.make(droplet_guid: droplet.guid, next_droplet_guid: next_droplet.guid) }
     let(:droplet) { VCAP::CloudController::DropletModel.make(:buildpack, state: VCAP::CloudController::DropletModel::STAGED_STATE) }
+    let(:next_droplet) { VCAP::CloudController::DropletModel.make(:buildpack, state: VCAP::CloudController::DropletModel::STAGED_STATE) }
     let(:space) { app_model.space }
     let(:org) { space.organization }
     let(:user) { set_current_user(VCAP::CloudController::User.make) }
@@ -1009,13 +1010,28 @@ RSpec.describe AppsV3Controller, type: :controller do
     end
 
     it 'returns a 200 and the app' do
-      put :start, guid: app_model.guid
+      put :zdt_start, guid: app_model.guid
 
       response_body = parsed_body
 
       expect(response.status).to eq 200
       expect(response_body['guid']).to eq(app_model.guid)
       expect(response_body['state']).to eq('STARTED')
+    end
+
+    context 'when the app does not have a next droplet' do
+      before do
+        next_droplet.destroy
+      end
+
+      it 'raises an API 422 error' do
+        put :zdt_start, guid: app_model.guid
+
+        response_body = parsed_body
+        expect(response_body['errors'].first['title']).to eq 'CF-UnprocessableEntity'
+        expect(response_body['errors'].first['detail']).to eq 'Assign a droplet before starting this app.'
+        expect(response.status).to eq 422
+      end
     end
   end
 

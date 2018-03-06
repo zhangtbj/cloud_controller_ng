@@ -27,7 +27,7 @@ module VCAP::CloudController
 
       if app.next_droplet && app.next_droplet.process_types
         @logger.debug('using the droplet process_types', guid: app.guid)
-        evaluate_processes(app, app.next_droplet.process_types)
+        evaluate_processes_next(app, app.next_droplet.process_types)
       else
         @logger.warn('no process_types found', guid: app.guid)
         raise ProcessTypesNotFound
@@ -48,7 +48,28 @@ module VCAP::CloudController
       ProcessDelete.new(@user_audit_info).delete(processes.all)
     end
 
+    def evaluate_processes_next(app, process_types)
+      types = []
+      process_types.each do |(type, command)|
+        type = type.to_s
+        types << type
+        add_or_update_process_next(app, type, command)
+      end
+
+      processes = app.processes_dataset.where(Sequel.~(type: types))
+      ProcessDelete.new(@user_audit_info).delete(processes.all)
+    end
+
     def add_or_update_process(app, type, command)
+      existing_process = app.processes_dataset.where(type: type).first
+      if existing_process
+        ProcessUpdate.new(@user_audit_info).update(existing_process, ProcessUpdateMessage.new({ command: command }))
+      else
+        ProcessCreate.new(@user_audit_info).create(app, { type: type, command: command })
+      end
+    end
+
+    def add_process(app, type, command)
       existing_process = app.processes_dataset.where(type: type).first
       if existing_process
         ProcessUpdate.new(@user_audit_info).update(existing_process, ProcessUpdateMessage.new({ command: command }))
