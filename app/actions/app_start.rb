@@ -18,13 +18,21 @@ module VCAP::CloudController
       end
 
       def start_next_droplet(app:, user_audit_info:, record_event: true)
+        # TODO: how?
+        # app.processes.add(make_new_process_from_next_droplet)
+        # app.all_those_proceses = started state
+
         app.db.transaction do
           app.lock!
-          app.update(desired_state: ProcessModel::STARTED)
+          app.processes.each do |process|
+            db_process = VCAP::CloudController::ProcessFetcher.new.fetch(process_guid: process.guid).first
 
-          app.processes.each { |process| process.update(state: ProcessModel::STARTED) }
+            cloned_process = VCAP::CloudController::ProcessCloner.clone_record(db_process)
+            cloned_process.update(state: ProcessModel::STARTED, current_droplet: app.next_droplet)
 
-          record_audit_event(app, user_audit_info) if record_event
+            diego_runner = CloudController::DependencyLocator.instance.runners.runner_for_process(cloned_process)
+            diego_runner.start
+          end
         end
       rescue Sequel::ValidationFailed => e
         raise InvalidApp.new(e.message)

@@ -53,7 +53,7 @@ module VCAP::CloudController
       process_types.each do |(type, command)|
         type = type.to_s
         types << type
-        add_or_update_process_next(app, type, command)
+        add_or_update_process(app, type, command)
       end
 
       processes = app.processes_dataset.where(Sequel.~(type: types))
@@ -61,15 +61,6 @@ module VCAP::CloudController
     end
 
     def add_or_update_process(app, type, command)
-      existing_process = app.processes_dataset.where(type: type).first
-      if existing_process
-        ProcessUpdate.new(@user_audit_info).update(existing_process, ProcessUpdateMessage.new({ command: command }))
-      else
-        ProcessCreate.new(@user_audit_info).create(app, { type: type, command: command })
-      end
-    end
-
-    def add_process(app, type, command)
       existing_process = app.processes_dataset.where(type: type).first
       if existing_process
         ProcessUpdate.new(@user_audit_info).update(existing_process, ProcessUpdateMessage.new({ command: command }))

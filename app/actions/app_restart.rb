@@ -64,8 +64,13 @@ module VCAP::CloudController
         # process types have a uniqueness constraint
         elsif k == :type
           clone_hash[:type] = "clone-#{v}"
+        elsif k == :guid
+          clone_hash[:guid] = SecureRandom.uuid
+        elsif k == :metadata
+          clone_hash[:metadata] = JSON.parse(v)
+        else
+          clone_hash[k] = v
         end
-        clone_hash[k] = v
       end
 
       ProcessModel.new(clone_hash).save

@@ -128,7 +128,7 @@ class AppsV3Controller < ApplicationController
       FeatureFlag.raise_unless_enabled!(:diego_docker)
     end
 
-    AppStart.start(app: app, user_audit_info: user_audit_info)
+    AppStart.start_next_droplet(app: app, user_audit_info: user_audit_info)
 
     render status: :ok, json: Presenters::V3::AppPresenter.new(app)
   rescue AppStart::InvalidApp => e

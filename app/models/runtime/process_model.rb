@@ -72,7 +72,7 @@ module VCAP::CloudController
 
     dataset_module do
       def staged
-        association_join(:current_droplet) || association_join(:next_droplet)
+        association_join(:current_droplet)
       end
 
       def runnable
@@ -111,12 +111,6 @@ module VCAP::CloudController
       join_table:        AppModel.table_name,
       left_primary_key:  :app_guid, left_key: :guid,
       right_primary_key: :guid, right_key: :droplet_guid
-
-    one_through_one :next_droplet,
-      class:             '::VCAP::CloudController::DropletModel',
-      join_table:        AppModel.table_name,
-      left_primary_key:  :app_guid, left_key: :guid,
-      right_primary_key: :guid, right_key: :next_droplet_guid
 
     one_to_many :route_mappings, class: 'VCAP::CloudController::RouteMappingModel', primary_key: [:app_guid, :type], key: [:app_guid, :process_type]
 
@@ -552,7 +546,7 @@ module VCAP::CloudController
     end
 
     def web?
-      type == ProcessTypes::WEB
+      type == ProcessTypes::WEB || "clone-web"
     end
 
     private
