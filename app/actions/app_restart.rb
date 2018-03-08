@@ -65,7 +65,7 @@ module VCAP::CloudController
         elsif k == :type
           clone_hash[:type] = "clone-#{v}"
         elsif k == :guid
-          clone_hash[:guid] = SecureRandom.uuid
+          next
         elsif k == :metadata
           clone_hash[:metadata] = JSON.parse(v)
         else
@@ -74,6 +74,26 @@ module VCAP::CloudController
       end
 
       ProcessModel.new(clone_hash).save
+    end
+  end
+
+  class RouteMappingCloner
+    def self.clone_record(route_mapping, new_process)
+      clone_hash = {}
+
+      route_mapping.values.each do |k, v|
+        if k == :id
+          next
+        elsif k == :process_type
+          clone_hash[:process_type] = new_process.type
+        elsif k == :guid
+          next
+        else
+          clone_hash[k] = v
+        end
+      end
+
+      RouteMappingModel.create(clone_hash)
     end
   end
 end

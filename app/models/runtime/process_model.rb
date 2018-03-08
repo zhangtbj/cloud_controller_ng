@@ -546,7 +546,7 @@ module VCAP::CloudController
     end
 
     def web?
-      type == ProcessTypes::WEB || "clone-web"
+      type == ProcessTypes::WEB || 'clone-web'
     end
 
     private
