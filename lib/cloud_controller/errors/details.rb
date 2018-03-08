@@ -11,6 +11,13 @@ module CloudController
 
       def self.details_by_name
         details_by_name = {}
+        # what this method returns
+        # details_by_name =
+        # { 'UnprocessableEntity' =>
+        #   http_code: 422
+        #   message: "%s"
+        #   code: 10008
+        # }
         details_by_code.each do |code, values|
           key = values['name']
           details_by_name[key] = values

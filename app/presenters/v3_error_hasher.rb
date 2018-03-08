@@ -15,27 +15,31 @@ class V3ErrorHasher < BaseErrorHasher
               elsif services_error?
                 services_error_hash
               else
-                UNKNOWN_ERROR_HASH.dup
+                [UNKNOWN_ERROR_HASH.dup]
               end
-    payload['test_mode_info'] = test_mode_hash
+    payload << { 'test_mode_info' => test_mode_hash }
 
-    { 'errors' => [payload] }
+    { 'errors' => payload }
   end
 
   def sanitized_hash
     return_hash = unsanitized_hash
-    return_hash['errors'].first.keep_if { |k, _| allowed_keys.include? k }
+    return_hash['errors'].delete_if { |hash| (hash.keep_if { |k,_| allowed_keys.include? k }).empty? }
     return_hash
   end
 
   private
 
   def api_error_hash
-    {
-      'detail' => error.message,
-      'title'  => "CF-#{error.name}",
-      'code'   => error.code,
-    }
+   result_array = []
+   error.message.each do |message|
+     result_array << {
+     'detail' => message,
+     'title'  => "CF-#{error.name}",
+       'code'   => error.code,
+     }
+   end
+   result_array
   end
 
   def services_error_hash
@@ -48,7 +52,7 @@ class V3ErrorHasher < BaseErrorHasher
       hash[key] = error.to_h[key] unless error.to_h[key].nil?
     end
 
-    hash
+    [ hash ]
   end
 
   def test_mode_hash
@@ -65,7 +69,7 @@ class V3ErrorHasher < BaseErrorHasher
     }
     info.merge!(error.to_h) if error.respond_to?(:to_h)
 
-    info
+    [ info ]
   end
 
   def allowed_keys

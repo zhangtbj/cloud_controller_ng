@@ -26,15 +26,15 @@ module CloudController
       def message
         return unless args || details
 
-        formatted_args = args.map do |arg|
-          (arg.is_a? Array) ? arg.map(&:to_s).join(', ') : arg.to_s
+        formatted_args = args.flatten.map do |arg|
+          begin
+            sprintf(I18n.translate(details.name, raise: true, locale: I18n.locale), arg)
+          rescue I18n::MissingTranslationData
+            sprintf(details.message_format, arg)
+          end
         end
 
-        begin
-          sprintf(I18n.translate(details.name, raise: true, locale: I18n.locale), *formatted_args)
-        rescue I18n::MissingTranslationData
-          sprintf(details.message_format, *formatted_args)
-        end
+        formatted_args
       end
 
       def code
