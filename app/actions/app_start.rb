@@ -53,14 +53,15 @@ module VCAP::CloudController
             original_processes.map(&:destroy)
 
             cloned_processes.each do |type, process|
-              # Delete route mapping pointing to "clone-*" processes
-              RouteMappingDelete.new(user_audit_info).delete(
-                RouteMappingModel.where(app: app, process_type: process.type).first
-              )
-
               # Update cloned processes to their original types
+              clone_type = process.type
               process.type = type
               process.save
+
+              # Delete route mapping pointing to "clone-*" processes
+              RouteMappingDelete.new(user_audit_info).delete(
+                RouteMappingModel.where(app: app, process_type: clone_type).first
+              )
             end
           end
         else
