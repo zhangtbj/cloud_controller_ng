@@ -5,14 +5,15 @@ module VCAP::CloudController
       @runners = runners || CloudController::DependencyLocator.instance.runners
     end
 
-    def update_route_information
+    def update_route_information(performValidation: true)
       return unless @process
 
       with_transaction do
         @process.lock!
 
         if @process.diego?
-          @process.update(updated_at: Sequel::CURRENT_TIMESTAMP)
+          @process.set(updated_at: Sequel::CURRENT_TIMESTAMP)
+          @process.save_changes({ validate: performValidation })
         elsif @process.dea?
           @process.set_new_version
           @process.save_changes
