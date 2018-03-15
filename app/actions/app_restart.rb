@@ -61,9 +61,8 @@ module VCAP::CloudController
       record.values.each do |k, v|
         if k == :id
           next
-        # process types have a uniqueness constraint
-        elsif k == :type
-          clone_hash[:type] = "clone-#{v}"
+        elsif k == :revision
+          clone_hash[:revision] = v + 1
         elsif k == :guid
           next
         elsif k == :metadata

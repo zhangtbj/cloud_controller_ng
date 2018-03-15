@@ -12,7 +12,7 @@ module VCAP::CloudController
 
     def validate
       validates_presence [:app_port]
-      validates_unique [:app_guid, :route_guid, :process_type, :app_port]
+      validates_unique [:app_guid, :route_guid, :process_type, :revision, :app_port]
     end
 
     def self.user_visibility_filter(user)

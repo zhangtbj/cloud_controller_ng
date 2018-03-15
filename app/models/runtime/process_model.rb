@@ -112,7 +112,7 @@ module VCAP::CloudController
       left_primary_key:  :app_guid, left_key: :guid,
       right_primary_key: :guid, right_key: :droplet_guid
 
-    one_to_many :route_mappings, class: 'VCAP::CloudController::RouteMappingModel', primary_key: [:app_guid, :type], key: [:app_guid, :process_type]
+    one_to_many :route_mappings, class: 'VCAP::CloudController::RouteMappingModel', primary_key: [:app_guid, :type, :revision], key: [:app_guid, :process_type, :revision]
 
     add_association_dependencies events: :delete
 
@@ -121,13 +121,13 @@ module VCAP::CloudController
                       :state, :version, :command, :console, :debug, :staging_task_id,
                       :package_state, :health_check_type, :health_check_timeout, :health_check_http_endpoint,
                       :staging_failed_reason, :staging_failed_description, :diego, :docker_image, :package_updated_at,
-                      :detected_start_command, :enable_ssh, :ports
+                      :detected_start_command, :enable_ssh, :ports, :revision
 
     import_attributes :name, :production, :space_guid, :stack_guid, :buildpack,
       :detected_buildpack, :environment_json, :memory, :instances, :disk_quota,
       :state, :command, :console, :debug, :staging_task_id,
       :service_binding_guids, :route_guids, :health_check_type, :health_check_http_endpoint,
-      :health_check_timeout, :diego, :docker_image, :app_guid, :enable_ssh, :ports
+      :health_check_timeout, :diego, :docker_image, :app_guid, :enable_ssh, :ports, :revision
 
     serialize_attributes :json, :metadata
     serialize_attributes :integer_array, :ports

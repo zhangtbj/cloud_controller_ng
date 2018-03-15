@@ -26,7 +26,7 @@ module VCAP::CloudController
           app.processes.each do |process|
             process.reload
 
-            route_mapping = RouteMappingModel.where(app: app, process_type: process.type).first
+            route_mapping = RouteMappingModel.where(app: app, process_type: process.type, revision: process.revision).first
 
             cloned_process = VCAP::CloudController::ProcessCloner.clone_record(process)
 
@@ -49,19 +49,12 @@ module VCAP::CloudController
         if all_cloned_processes_running
           app.db.transaction do
             app.lock!
-            # Delete original processes so we can reuse their types
-            original_processes.map(&:destroy)
-
-            cloned_processes.each do |type, process|
-              # Update cloned processes to their original types
-              clone_type = process.type
-              process.type = type
-              process.save
-
+            original_processes.each do |process|
               # Delete route mapping pointing to "clone-*" processes
               RouteMappingDelete.new(user_audit_info).delete(
-                RouteMappingModel.where(app: app, process_type: clone_type).first
+                RouteMappingModel.where(app: app, process_type: process.type, revision: process.revision).first
               )
+              process.destroy
             end
           end
         else
@@ -70,7 +63,7 @@ module VCAP::CloudController
             cloned_processes.each do |type, process|
               # Delete route mapping pointing to "clone-*" processes
               RouteMappingDelete.new(user_audit_info).delete(
-                RouteMappingModel.where(app: app, process_type: process.type).first
+                RouteMappingModel.where(app: app, process_type: process.type, revision: process.revision).first
               )
 
               # Delete cloned processes so the zdt can be reattempted
@@ -101,6 +94,7 @@ module VCAP::CloudController
 
       def process_is_running?(process)
         stats = instances_reporter.stats_for_app(process)
+        stats.all? { |stat| stat[:state] == 'RUNNING'}
         stats[0][:state] == 'RUNNING'
       end
 
