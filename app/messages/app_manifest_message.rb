@@ -4,7 +4,7 @@ require 'cloud_controller/app_manifest/byte_converter'
 
 module VCAP::CloudController
   class AppManifestMessage < BaseMessage
-    ALLOWED_KEYS = [:instances, :memory, :disk_quota, :buildpack].freeze
+    ALLOWED_KEYS = [:instances, :memory, :disk_quota, :buildpack, :stack].freeze
 
     attr_accessor(*ALLOWED_KEYS)
     attr_accessor :manifest_process_scale_message, :app_update_message
@@ -32,9 +32,9 @@ module VCAP::CloudController
         errors.add(:base, error_message)
       end
 
-      if errors.empty? && buildpack_validator
-        buildpack_validator.valid?
-        buildpack_validator.errors.full_messages.each do |error_message|
+      if errors.empty? && lifecycle_validator
+        lifecycle_validator.valid?
+        lifecycle_validator.errors.full_messages.each do |error_message|
           errors.add(:base, error_message)
         end
       end
@@ -60,11 +60,12 @@ module VCAP::CloudController
       ALLOWED_KEYS
     end
 
-    def buildpack_validator
-      @buildpack_validator ||= begin
+    def lifecycle_validator
+      @lifecycle_validator ||= begin
         buildpacks = app_update_message.try(:buildpack_data).try(:buildpacks)
-        if buildpacks
-          db_result = BuildpackLifecycleFetcher.fetch(buildpacks, Stack.last.try(:name))
+        stack = app_update_message.try(:buildpack_data).try(:stack)
+        if buildpacks || stack
+          db_result = BuildpackLifecycleFetcher.fetch(buildpacks, stack)
           BuildpackLifecycleDataValidator.new({
             buildpack_infos: db_result[:buildpack_infos],
             stack: db_result[:stack],
@@ -84,17 +85,17 @@ module VCAP::CloudController
     def app_update_attribute_mapping
       {
         lifecycle: buildpack_lifecycle_data,
-
       }.compact
     end
 
     def buildpack_lifecycle_data
-      return unless requested?(:buildpack)
+      return unless requested?(:buildpack) || requested?(:stack)
 
       {
         type: Lifecycles::BUILDPACK,
         data: {
-          buildpacks: [buildpack].reject { |x| x == 'default' }.compact
+          buildpacks: [buildpack].reject { |x| x == 'default' }.compact,
+          stack: stack
         }
       }
     end

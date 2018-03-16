@@ -116,6 +116,43 @@ module VCAP::CloudController
         end
       end
 
+      describe 'stack' do
+        context 'when providing a valid stack name' do
+          let(:params) { {stack: 'cflinuxfs2'} }
+
+          it 'is valid' do
+            message = AppManifestMessage.new(params)
+
+            expect(message).to be_valid
+            expect(message.stack).to eq('cflinuxfs2')
+          end
+        end
+
+        context 'when the stack is not a string' do
+          let(:params) { { stack: 99 } }
+
+          it 'is not valid' do
+            message = AppManifestMessage.new(params)
+
+            expect(message).not_to be_valid
+            expect(message.errors.count).to eq(1)
+            expect(message.errors.full_messages).to include('Stack must be a string')
+          end
+        end
+
+        context 'when the stack is not a known stack' do
+          let(:params) { { stack: 'garbage' } }
+
+          it 'is not valid' do
+            message = AppManifestMessage.new(params)
+
+            expect(message).not_to be_valid
+            expect(message.errors.count).to eq(1)
+            expect(message.errors.full_messages).to include(%/Stack "#{params[:stack]}" must be an existing stack/)
+          end
+        end
+      end
+
       describe 'instances' do
         context 'when instances is not an number' do
           let(:params) { { instances: 'silly string thing' } }
