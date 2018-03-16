@@ -125,9 +125,7 @@ module VCAP::CloudController
 
       validate_name_update(service_instance)
       validate_space_update(related_objects[:space])
-      validate_plan_update(related_objects[:plan], related_objects[:service], service_instance)
-
-      update = ServiceInstanceUpdate.new(accepts_incomplete: accepts_incomplete, services_event_repository: @services_event_repository)
+      validate_plan_update(related_objects[:plan], related_objects[:service], service_instance)update = ServiceInstanceUpdate.new(accepts_incomplete: accepts_incomplete, services_event_repository: @services_event_repository)
       update.update_service_instance(service_instance, request_attrs)
 
       status_code = status_from_operation_state(service_instance)
@@ -445,6 +443,15 @@ module VCAP::CloudController
       end
     end
 
+    def validate_update_with_paid_plan(current_plan, space, service_instance)
+      return if current_plan.free
+      space_quota = space.space_quota_definition
+      return if space_quota && space_quota.non_basic_services_allowed
+      org_quota = space.organization.quota_definition
+      return if !org_quota || org_quota.non_basic_services_allowed
+      unable_to_update_to_nonfree_plan!(service_instance)
+    end
+
     def validate_space_update(space)
       space_change_not_allowed! if space_change_requested?(request_attrs['space_guid'], space)
     end
@@ -497,6 +504,13 @@ module VCAP::CloudController
       raise CloudController::Errors::ApiError.new_from_details(
         'ServicePlanInvalid',
         'cannot switch to non-bindable plan when service bindings exist'
+      )
+    end
+
+    def unable_to_update_to_nonfree_plan!(service_instance)
+      raise CloudController::Errors::ApiError.new_from_details(
+        'ServicePlanInvalid',
+        "cannot update service-instance #{service_instance.name} when quota disallows paid service plans"
       )
     end
 
