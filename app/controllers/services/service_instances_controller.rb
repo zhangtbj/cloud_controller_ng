@@ -119,16 +119,31 @@ module VCAP::CloudController
         raise CloudController::Errors::ApiError.new_from_details('UserProvidedServiceInstanceHandlerNeeded')
       end
 
+      # seems as if model is not being validated at all
+      # we do call ServiceInstanceUpdate.update_cc_only_attributes, which ultimately calls Sequel#save (and its validations)
+      #
+      # we're not validating service instances that have a space -> that should throw if we were
+
       validate_shared_space_updateable(service_instance)
       validate_access(:read_for_update, service_instance)
       validate_access(:update, projected_service_instance(service_instance))
 
       validate_name_update(service_instance)
       validate_space_update(related_objects[:space])
-      validate_plan_update(related_objects[:plan], related_objects[:service], service_instance)
+
+
+      service_plan = if @request_attrs[:requested_plan_guid]
+        ServicePlan.find(guid: @request_attrs[:requested_plan_guid])
+      else
+        related_objects[:plan]
+      end
 
       update = ServiceInstanceUpdate.new(accepts_incomplete: accepts_incomplete, services_event_repository: @services_event_repository)
+      service_instance.service_plan_guid = service_plan.guid
+
       update.update_service_instance(service_instance, request_attrs)
+
+      validate_plan_update(related_objects[:plan], related_objects[:service], service_instance)
 
       status_code = status_from_operation_state(service_instance)
       if status_code == HTTP::ACCEPTED
@@ -433,17 +448,43 @@ module VCAP::CloudController
       request_attrs
     end
 
+    # def old_validate_plan_update(current_plan, service, service_instance)
+    #   requested_plan_guid = request_attrs['service_plan_guid']
+    #   if plan_update_requested?(requested_plan_guid, current_plan)
+    #     plan_not_updateable! if service_disallows_plan_update?(service)
+    #
+    #     requested_plan = ServicePlan.find(guid: requested_plan_guid)
+    #     invalid_relation!('Plan') if invalid_plan?(requested_plan, service)
+    #
+    #     unable_to_update_to_nonbindable_plan! if !requested_plan.bindable? && service_instance.service_bindings.any?
+    #   end
+    # end
+
     def validate_plan_update(current_plan, service, service_instance)
       requested_plan_guid = request_attrs['service_plan_guid']
+
+      service_plan = requested_plan_guid ? ServicePlan.find(guid: requested_plan_guid) : current_plan
+      if !service_plan.valid? || invalid_plan?(service_plan, service)
+        invalid_relation!('Plan')
+      end
+
       if plan_update_requested?(requested_plan_guid, current_plan)
         plan_not_updateable! if service_disallows_plan_update?(service)
 
         requested_plan = ServicePlan.find(guid: requested_plan_guid)
-        invalid_relation!('Plan') if invalid_plan?(requested_plan, service)
 
         unable_to_update_to_nonbindable_plan! if !requested_plan.bindable? && service_instance.service_bindings.any?
       end
     end
+
+    # def validate_update_with_paid_plan(current_plan, space, service_instance)
+    #   return if current_plan.free
+    #   space_quota = space.space_quota_definition
+    #   return if space_quota && space_quota.non_basic_services_allowed
+    #   org_quota = space.organization.quota_definition
+    #   return if !org_quota || org_quota.non_basic_services_allowed
+    #   unable_to_update_to_nonfree_plan!(service_instance)
+    # end
 
     def validate_space_update(space)
       space_change_not_allowed! if space_change_requested?(request_attrs['space_guid'], space)
@@ -499,6 +540,13 @@ module VCAP::CloudController
         'cannot switch to non-bindable plan when service bindings exist'
       )
     end
+
+    # def unable_to_update_to_nonfree_plan!(service_instance)
+    #   raise CloudController::Errors::ApiError.new_from_details(
+    #     'ServiceInstanceServicePlanNotAllowed',
+    #     "cannot update service-instance #{service_instance.name} when quota disallows paid service plans"
+    #   )
+    # end
 
     def invalid_relation!(message)
       raise CloudController::Errors::ApiError.new_from_details('InvalidRelation', message)

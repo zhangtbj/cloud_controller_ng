@@ -17,7 +17,11 @@ module VCAP::CloudController
       cached_service_instance = cache_service_instance(service_instance)
       previous_values = cache_previous_values(service_instance)
 
+      # this is where we check org and space quota definitions
+      # and add errors if the policies are violated
       update_cc_only_attrs(service_instance, request_attrs)
+
+      service_instance.validate
 
       if update_broker_needed?(request_attrs, cached_service_instance['service_plan_guid'])
         handle_broker_update(cached_service_instance, lock, previous_values, request_attrs, service_instance)

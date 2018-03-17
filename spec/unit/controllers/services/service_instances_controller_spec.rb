@@ -2457,6 +2457,56 @@ module VCAP::CloudController
           expect(last_response).to have_status_code(400)
         end
       end
+
+      context 'when the service plan is paid and the org quota disallows paid services' do
+        let(:paid_plan) { ServicePlan.make(:v2) }
+        let(:broker) { paid_plan.service.service_broker }
+        let(:org) { space.organization }
+        let(:org_quota) { org.quota_definition }
+        let(:response_body) do
+          {}
+        end
+
+        let(:request_body) do
+          MultiJson.dump(
+            tournament: 'bratislava-tournament'
+          )
+        end
+
+        let(:service_broker_url_regex) do
+          uri = URI(broker.broker_url)
+          broker_url = uri.host + uri.path
+          %r{https://#{broker_url}/v2/service_instances/(.*)}
+        end
+
+        before do
+          stub_request(:put, service_broker_url_regex).
+            with(headers: {'Accept'=>'application/json'}, basic_auth: basic_auth(service_broker: broker)).
+            to_return(status: 200, body: "{}", headers: {'Content-Type' => 'application/json'})
+        end
+
+        # for this to be properly failing for scenario A
+        #   we should have to validate arbitrary non-cc params
+        #   and return a 400
+        it 'should complain when trying to modify an instance of a paid service plan' do
+          service_instance_params = {
+            name: 'name',
+            space_guid: space.guid,
+            service_plan_guid: paid_plan.guid
+          }
+          post '/v2/service_instances', MultiJson.dump(service_instance_params)
+          expect(last_response.status).to eq(201), last_response.body
+          service_instance_guid = parsed_response['metadata']['guid']
+
+          org_quota.non_basic_services_allowed = false
+          org_quota.save
+          put "/v2/service_instances/#{service_instance.guid}?accepts_incomplete=true", request_body
+          expect(last_response.status).to eq(400)#, last_response.body
+        end
+      end
+
+      context 'when the service plan is paid and the space quota disallows paid services' do
+      end
     end
 
     describe 'DELETE /v2/service_instances/:service_instance_guid' do
