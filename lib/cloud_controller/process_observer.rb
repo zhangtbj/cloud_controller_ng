@@ -35,7 +35,12 @@ module VCAP::CloudController
           return
         end
 
-        @runners.runner_for_process(process).start unless process.needs_staging?
+
+        unless process.needs_staging?
+          @runners.runner_for_process(process).start
+          diego_process_guid = VCAP::CloudController::Diego::ProcessGuid.from_process(process)
+          CopilotHandler.new.associate_processes(process.guid, diego_process_guid) if Config.config.get(:copilot, :enabled)
+        end
       end
 
       def react_to_instances_change(process)

@@ -20,7 +20,10 @@ module VCAP::CloudController
       end
 
       def start(_={})
-        with_logging('start') { messenger.send_desire_request(@process, @config) }
+        with_logging('start') do
+          # associate process or w/e
+          messenger.send_desire_request(@process, @config)
+        end
       end
 
       def update_routes
