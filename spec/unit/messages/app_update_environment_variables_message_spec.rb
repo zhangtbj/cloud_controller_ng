@@ -112,6 +112,16 @@ module VCAP::CloudController
         expect(message.errors.full_messages[0]).to match("Non-string value in environment variable for key 'some_number'")
       end
 
+      it 'returns a validation error when var is not a hash' do
+        invalid_body = {
+          var: 'sweet potato'
+        }
+        message = AppUpdateEnvironmentVariablesMessage.new(invalid_body)
+
+        expect(message).not_to be_valid
+        expect(message.errors.full_messages[0]).to match('must be a hash')
+      end
+
       it 'returns successfully when a value is nil' do
         body = {
           var: {
