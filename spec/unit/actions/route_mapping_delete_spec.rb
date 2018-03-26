@@ -20,6 +20,30 @@ module VCAP::CloudController
       allow(event_repository).to receive(:record_unmap_route)
     end
 
+    describe '#unmap' do
+      it 'can unmap a single route mapping' do
+        route_mapping_delete.unmap(route_mapping)
+        expect(route_mapping.exists?).to be_truthy
+      end
+
+      it 'delegates to the route handler to update route information without process validation' do
+        route_mapping_delete.unmap(route_mapping)
+        expect(route_handler).to have_received(:update_route_information).with(perform_validation: false)
+      end
+
+      it 'records an event for unmapping a route to an app' do
+        route_mapping_delete.unmap(route_mapping)
+
+        expect(event_repository).to have_received(:record_unmap_route).with(
+          app,
+          route,
+          user_audit_info,
+          route_mapping.guid,
+          route_mapping.process_type
+        )
+      end
+    end
+
     describe '#delete' do
       context 'when expected route mappings are present in the database' do
         it 'deletes the route from the app' do
@@ -45,7 +69,7 @@ module VCAP::CloudController
           expect(route_handler).to have_received(:update_route_information).with(perform_validation: false)
         end
 
-        it 'records an event for un mapping a route to an app' do
+        it 'records an event for unmapping a route to an app' do
           route_mapping_delete.delete(route_mapping)
 
           expect(event_repository).to have_received(:record_unmap_route).with(
@@ -73,9 +97,9 @@ module VCAP::CloudController
           expect(route_mapping_2.exists?).to be_falsey
         end
 
-        it 'does not delegate to the route handler to update route information' do
+        it 'does delegate to the route handler to update route information' do
           route_mapping_delete.delete(route_mapping)
-          expect(route_handler).not_to have_received(:update_route_information)
+          expect(route_handler).to have_received(:update_route_information)
         end
 
         it 'still records an event for un mapping a route to an app' do
