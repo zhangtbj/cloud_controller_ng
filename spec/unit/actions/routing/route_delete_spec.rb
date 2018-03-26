@@ -84,10 +84,10 @@ module VCAP::CloudController
         let!(:route_mapping_2) { RouteMappingModel.make route: route }
 
         before do
-          expect_any_instance_of(RouteMappingDelete).to receive(:delete).with(contain_exactly(route_mapping, route_mapping_2))
+          expect_any_instance_of(RouteMappingDelete).to receive(:unmap_all).with(contain_exactly(route_mapping, route_mapping_2))
         end
 
-        it 'deletes the mappings through RouteMappingDelete' do
+        it 'deletes the mappings' do
           route_delete_action.delete_sync(route: route, recursive: recursive)
 
           expect(route_mapping.exists?).to be_falsey
@@ -132,6 +132,55 @@ module VCAP::CloudController
         execute_all_jobs(expected_successes: 1, expected_failures: 0)
 
         expect(route.exists?).to be_falsey
+      end
+      it 'creates a route delete audit event' do
+        route_delete_action.delete_sync(route: route, recursive: recursive)
+
+        expect(route_event_repository).to have_received(:record_route_delete_request).with(route, user_audit_info, false)
+      end
+
+      context 'when there are route mappings' do
+        let!(:route_mapping) { RouteMappingModel.make route: route }
+        let!(:route_mapping_2) { RouteMappingModel.make route: route }
+
+        before do
+          expect_any_instance_of(RouteMappingDelete).to receive(:unmap_all).with(contain_exactly(route_mapping, route_mapping_2))
+        end
+
+        it 'deletes the mappings' do
+          route_delete_action.delete_sync(route: route, recursive: recursive)
+
+          expect(route_mapping.exists?).to be_falsey
+          expect(route_mapping_2.exists?).to be_falsey
+        end
+      end
+
+      context 'when there are route services bound to the route' do
+        let(:route_binding) { RouteBinding.make }
+        let(:route) { route_binding.route }
+
+        context 'and it is a recursive delete' do
+          let(:recursive) { true }
+
+          before do
+            stub_unbind(route_binding)
+          end
+
+          it 'deletes the route and associated binding' do
+            route_delete_action.delete_sync(route: route, recursive: recursive)
+
+            expect(Route.find(guid: route.guid)).not_to be
+            expect(RouteBinding.find(guid: route_binding.guid)).not_to be
+          end
+        end
+
+        context 'and it is not a recursive delete' do
+          it 'raises an error and does not delete anything' do
+            expect {
+              route_delete_action.delete_sync(route: route, recursive: recursive)
+            }.to raise_error(RouteDelete::ServiceInstanceAssociationError)
+          end
+        end
       end
     end
   end

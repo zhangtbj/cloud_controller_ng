@@ -1561,6 +1561,7 @@ module VCAP::CloudController
           expect(route.reload.apps).to match_array([])
 
           delete "/v2/routes/#{route.guid}/apps/#{process.guid}"
+          ap parsed_response
           expect(last_response.status).to eq(204)
 
           expect(route.reload.apps).to be_empty

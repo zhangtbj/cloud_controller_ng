@@ -10,7 +10,8 @@ require 'actions/staging_cancel'
 
 module VCAP::CloudController
   class AppDelete
-    class InvalidDelete < StandardError; end
+    class InvalidDelete < StandardError;
+    end
 
     def initialize(user_audit_info)
       @user_audit_info = user_audit_info
@@ -51,7 +52,11 @@ module VCAP::CloudController
       TaskDelete.new(@user_audit_info).delete(app.tasks)
       BuildDelete.new(StagingCancel.new(stagers)).delete(app.builds)
       DropletDelete.new(@user_audit_info).delete(app.droplets)
-      RouteMappingDelete.new(@user_audit_info).delete(route_mappings_to_delete(app))
+
+      route_mappings_to_delete(app).each do |route_mapping|
+        RouteMappingDelete.new(@user_audit_info).delete(route_mapping)
+      end
+
       ProcessDelete.new(@user_audit_info).delete(app.processes)
       errors = ServiceBindingDelete.new(@user_audit_info).delete(app.service_bindings)
       raise errors.first unless errors.empty?

@@ -329,8 +329,8 @@ module VCAP::CloudController
       route = Route.find(guid: request_attrs['route'])
       raise CloudController::Errors::ApiError.new_from_details('RouteNotFound', route_guid) unless route
 
-      route_mapping = RouteMappingModel.find(app: process.app, route: route, process: process)
-      RouteMappingDelete.new(user_audit_info).delete(route_mapping)
+      route_mappings = RouteMappingModel.find(app: process.app, route: route, process: process)
+      Array(route_mappings).each { |route_mapping| RouteMappingDelete.new(user_audit_info).delete(route_mapping) }
 
       after_update(process)
 

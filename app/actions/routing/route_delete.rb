@@ -1,15 +1,16 @@
 module VCAP::CloudController
   class RouteDelete
-    class ServiceInstanceAssociationError < StandardError; end
+    class ServiceInstanceAssociationError < StandardError;
+    end
 
     def initialize(app_event_repository:, route_event_repository:, user_audit_info:)
-      @app_event_repository   = app_event_repository
+      @app_event_repository = app_event_repository
       @route_event_repository = route_event_repository
-      @user_audit_info        = user_audit_info
+      @user_audit_info = user_audit_info
       @logger = Steno.logger('cc.action.route_delete')
     end
 
-    def delete_sync(route:, recursive:)
+    def delete_sync(route:, recursive:  )
       deletion_job = do_delete(recursive, route)
       deletion_job.perform
     end
@@ -21,9 +22,9 @@ module VCAP::CloudController
 
     def delete_unmapped_route(route:)
       delete_count = Route.where(id: route.id).
-                     exclude(guid: RouteMappingModel.select(:route_guid)).
-                     exclude(id: RouteBinding.select(:route_id)).
-                     delete
+        exclude(guid: RouteMappingModel.select(:route_guid)).
+        exclude(id: RouteBinding.select(:route_id)).
+        delete
 
       if delete_count > 0
         route_event_repository.record_route_delete_request(route, user_audit_info, false)
@@ -41,7 +42,9 @@ module VCAP::CloudController
 
       route_event_repository.record_route_delete_request(route, user_audit_info, recursive)
 
-      RouteMappingDelete.new(user_audit_info).delete(route.route_mappings)
+      if (route.route_mappings)
+        RouteMappingDelete.new(user_audit_info).unmap_all(route.route_mappings)
+      end
 
       Jobs::Runtime::ModelDeletion.new(route.class, route.guid)
     end

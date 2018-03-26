@@ -4,10 +4,8 @@ module VCAP::CloudController
       @user_audit_info = user_audit_info
     end
 
-    def unmap(route_mapping)
+    def notify_diego_of_impending_delete(route_mapping)
       logger.debug("removing route mapping: #{route_mapping.inspect}")
-
-      route_handler = ProcessRouteHandler.new(route_mapping.process)
 
       event_repository.record_unmap_route(
         route_mapping.app,
@@ -16,18 +14,22 @@ module VCAP::CloudController
         route_mapping.guid,
         route_mapping.process_type
       )
+
+      route_handler = ProcessRouteHandler.new(route_mapping.process)
       route_handler.update_route_information(perform_validation: false)
     end
 
-    def delete(route_mappings)
-      route_mappings = Array(route_mappings)
-
+    def notify_diego_of_all(route_mappings)
       route_mappings.each do |route_mapping|
         unmap(route_mapping)
-        RouteMappingModel.db.transaction do
-          next if RouteMappingModel.find(guid: route_mapping.guid).nil?
-          route_mapping.destroy
-        end
+      end
+    end
+
+    def delete(route_mapping)
+      unmap(route_mapping)
+      RouteMappingModel.db.transaction do
+        next if RouteMappingModel.find(guid: route_mapping.guid).nil?
+        route_mapping.destroy
       end
     end
 
