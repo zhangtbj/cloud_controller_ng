@@ -5,8 +5,16 @@ module VCAP::CloudController
       @logger = logger
     end
 
-    def create_route(route_hash:)
+    def create_route(route_hash:, generate_port: false, router_group: nil)
       Route.db.transaction do
+
+        if generate_port
+          Locking[name: 'random-ports'].lock!
+          generated_port = PortGenerator.new(route_hash['domain_guid']).generate_port(router_group.reservable_ports)
+          raise CloudController::Errors::ApiError.new_from_details('OutOfRouterGroupPorts', router_group) if generated_port < 0
+          route_hash['port'] = generated_port
+        end
+
         route = Route.create_from_hash(route_hash)
         @access_validator.validate_access(:create, route)
 

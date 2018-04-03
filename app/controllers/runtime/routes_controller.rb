@@ -141,13 +141,17 @@ module VCAP::CloudController
 
       logger.debug 'cc.create', model: self.class.model_class_name, attributes: redact_attributes(:create, request_attrs)
 
-      overwrite_port! if convert_flag_to_bool(params['generate_port'])
-
+      # overwrite_port! if convert_flag_to_bool(params['generate_port'])
+      #
       route_create = RouteCreate.new(
         access_validator: self,
         logger: logger
       )
-      route = route_create.create_route(route_hash: @request_attrs)
+      route = route_create.create_route(
+        route_hash: @request_attrs,
+        generate_port: convert_flag_to_bool(params['generate_port']),
+        router_group: validated_router_group
+      )
 
       after_create(route)
 
