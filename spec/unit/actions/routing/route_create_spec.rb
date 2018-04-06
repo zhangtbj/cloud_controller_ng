@@ -30,6 +30,26 @@ module VCAP::CloudController
         allow(access_validator).to receive(:validate_access) { |_, route| access_validator_route_arg = route }
       end
 
+      context 'with generated ports' do
+        let(:router_group) { RouterGroup.new(reservable_ports: '1-11', name: 'awesome-group', guid: 'rg1') }
+        let(:domain) { SharedDomain.make(router_group_type: tcp)}
+
+        before do
+          # spy on random to return 0
+
+        end
+        it 'generates unique ports' do
+          routes = []
+          10.times do
+            Thread.new do
+              routes << route_create.create_route(route_hash: route_hash, generate_port: true, router_group: router_group)
+            end
+          end
+
+          expect(routes.map(:port).uniq.length).to eq(10)
+        end
+      end
+
       context 'when copilot is disabled' do
         it 'creates a route without notifying copilot' do
           expect {

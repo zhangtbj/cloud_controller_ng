@@ -661,6 +661,8 @@ module VCAP::CloudController
               end
             end
 
+            ## maybe add test about generating two ports at the same time, if you stub out Random to return zero and hit two simultaneous requests, they should both succeed
+
             context 'and a port is specified' do
               let(:port) { 10500 }
               let(:generated_port) { 14098 }

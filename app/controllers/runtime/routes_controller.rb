@@ -143,15 +143,29 @@ module VCAP::CloudController
 
       # overwrite_port! if convert_flag_to_bool(params['generate_port'])
       #
+      generate_port = convert_flag_to_bool(params['generate_port'])
+
+      add_warning('Specified port ignored. Random port generated.') if @request_attrs['port'] && generate_port
+
       route_create = RouteCreate.new(
         access_validator: self,
         logger: logger
       )
+
+      begin
       route = route_create.create_route(
-        route_hash: @request_attrs,
-        generate_port: convert_flag_to_bool(params['generate_port']),
-        router_group: validated_router_group
+        route_hash: @request_attrs.deep_dup,
+        generate_port: generate_port,
+        router_group: generate_port ? validated_router_group : nil
       )
+      rescue Sequel::UniqueConstraintViolation => e
+        @logger.warn("retrying random port #{e}")
+        route = route_create.create_route(
+          route_hash: @request_attrs.deep_dup,
+          generate_port: generate_port,
+          router_group: generate_port ? validated_router_group : nil
+        )
+      end
 
       after_create(route)
 
@@ -300,10 +314,10 @@ module VCAP::CloudController
 
     def overwrite_port!
       add_warning('Specified port ignored. Random port generated.') if @request_attrs['port']
-
-      generated_port = PortGenerator.new(@request_attrs['domain_guid']).generate_port(validated_router_group.reservable_ports)
-      raise CloudController::Errors::ApiError.new_from_details('OutOfRouterGroupPorts', validated_router_group.name) if generated_port < 0
-      overwrite_request_attr('port', generated_port)
+      #
+      # generated_port = PortGenerator.new(@request_attrs['domain_guid']).generate_port(validated_router_group.reservable_ports)
+      # raise CloudController::Errors::ApiError.new_from_details('OutOfRouterGroupPorts', validated_router_group.name) if generated_port < 0
+      # overwrite_request_attr('port', generated_port)
     end
 
     def validated_router_group
