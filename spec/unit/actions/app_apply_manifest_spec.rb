@@ -324,6 +324,78 @@ module VCAP::CloudController
         end
       end
 
+      describe 'updating routes' do
+        let(:message) { AppManifestMessage.new({
+          name: 'routes-test',
+          routes: { 'route': 'http://host.sub.some-domain.com/path'}
+        }) }
+        let(:manifest_routes_message) { message.manifest_routes_message }
+
+        let(:app) { AppModel.make }
+
+        context 'when the request is valid' do
+          context 'when the route already exists' do
+            let!(:domain) { VCAP::CloudController::SharedDomain.make(name: 'sub.some-domain.com') }
+            let!(:route) { Route.make(host: 'host', domain: domain, path: '/path') }
+
+            context 'when the route is already mapped to the app' do
+              before do
+                RouteMappingModel.make(app: app, route: route)
+              end
+
+              it 'returns the app' do
+                expect(
+                  app_apply_manifest.apply(app.guid, message)
+                ).to eq(app)
+                expect(app.reload.routes.length).to eq 1
+                expect(app.reload.routes.first.host).to eq 'host'
+                expect(app.reload.routes.first.domain.name).to eq 'sub.some-domain.com'
+                expect(app.reload.routes.first.path).to eq '/path'
+              end
+            end
+
+            context 'when the route is not mapped to the app' do
+              # what does the CLI do here?
+            end
+
+          end
+
+          context 'when the route does not already exist, but the domain does' do
+            let!(:domain) { VCAP::CloudController::SharedDomain.make(name: 'sub.some-domain.com') }
+
+            it 'creates and maps the route to the app' do
+              expect(
+                app_apply_manifest.apply(app.guid, message)
+              ).to eq(app)
+              expect(app.reload.routes.length).to eq 1
+              expect(app.reload.routes.first.host).to eq 'host'
+              expect(app.reload.routes.first.domain.name).to eq 'sub.some-domain.com'
+              expect(app.reload.routes.first.path).to eq '/path'
+            end
+          end
+
+          context 'when multiple domains match' do
+            # is these even possible?
+          end
+
+        end
+        context 'when the request is invalid' do
+          context 'when the domain does not exist' do
+
+          end
+
+          context 'when the app is in an org that does not have access to the provided domain'
+
+          context 'when there is no host provided' do
+
+          end
+          context 'when the host is invalid' do
+
+          end
+        end
+
+      end
+
       describe 'creating service bindings' do
         let(:message) { AppManifestMessage.new({ services: ['si-name'] }) } # why defined here?
         let(:space) { Space.make }

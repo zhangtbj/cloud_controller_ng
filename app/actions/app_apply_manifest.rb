@@ -1,6 +1,7 @@
 require 'actions/process_scale'
 require 'actions/service_binding_create'
 require 'cloud_controller/strategies/manifest_strategy'
+require 'cloud_controller/app_manifest/route_domain_splitter'
 
 module VCAP::CloudController
   class AppApplyManifest
@@ -20,9 +21,36 @@ module VCAP::CloudController
 
       ProcessUpdate.new(user_audit_info).update(app.web_process, message.manifest_process_update_message, ManifestStrategy)
 
+      message.manifest_routes_message.routes.each_value do |route|
+        splitRoutes = RouteDomainSplitter.split(route)
+
+        the_domain_to_use = nil
+        splitRoutes[:potential_domains].each do |name|
+          # if route already exists, do nothing
+          matching_domains = Domain.where(name: name).all.present?
+          # if matching_domains
+            # check the rest of the route, get valid host
+            # use the domain to create the route, map route to app
+            RouteCreate.new(access_validator: self, logger: logger).create_route(route_hash: {
+              host: splitRoutes[:host],
+              domain: { name: name},
+              path: splitRoutes[:path]
+            })
+            RouteMappingCreate.new(user_audit_info, route, app.web_process)
+            the_domain_to_use = name
+          # end
+
+          # return error that domain doesn't exist
+        end
+      end
+
       AppPatchEnvironmentVariables.new(user_audit_info).patch(app, message.app_update_environment_variables_message)
       create_service_instances(message, app)
       app
+    end
+
+    def validate_access
+      true # can we do this? Do we always want route create to think we have access?
     end
 
     def logger
