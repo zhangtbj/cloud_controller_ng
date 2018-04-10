@@ -20,27 +20,5 @@ module VCAP::CloudController
       end
     end
 
-    # context 'when there is no host' do
-    #   it 'returns an error' do
-    #     url = 'http://some-domain.com:'
-    #     expect(RouteDomainSplitter.split(url)).to eq(
-    #       protocol: 'http',
-    #       host: '',
-    #       domain: 'some-domain.com',
-    #     )
-    #   end
-    # end
-    #
-    # context 'when the host format is invalid' do
-    #   it 'returns an error' do
-    #     url = 'http://extra.host.some-domain.com:'
-    #     expect(RouteDomainSplitter.split(url)).to eq(
-    #       protocol: 'http',
-    #       host: '',
-    #       domain: 'some-domain.com',
-    #     )
-    #   end
-    # end
-
   end
 end
