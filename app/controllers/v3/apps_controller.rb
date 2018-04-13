@@ -41,7 +41,10 @@ class AppsV3Controller < ApplicationController
   end
 
   def show
-    app, space, org = AppFetcher.new.fetch(params[:guid])
+    message = AppsShowMessage.from_params(query_params)
+    invalid_param!(message.errors.full_messages) unless message.valid?
+
+    app, space, org = AppFetcher.new.fetch(message.guid)
 
     app_not_found! unless app && can_read?(space.guid, org.guid)
 
