@@ -2,8 +2,10 @@ require 'action_controller/railtie'
 
 class Application < ::Rails::Application
   config.exceptions_app = self.routes
+  config.api_only = true
 
-  config.middleware.swap(ActionDispatch::ParamsParser, ActionDispatch::ParamsParser, {
+  # Deprecated: Use ActionDispatch::Request.parameter_parsers
+  config.middleware.insert_after(ActionDispatch::Executor, ActionDispatch::ParamsParser, {
     Mime::Type.lookup('application/x-yaml') => lambda { |body| YAML.safe_load(body).with_indifferent_access }
   })
 

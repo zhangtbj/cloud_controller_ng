@@ -29,4 +29,5 @@ task :rubocop_autocorrect do
   exit(exit_code) if exit_code != 0
 end
 
-Rake::Task['doc:app'].clear
+# What is this?
+# Rake::Task['doc:app'].clear
