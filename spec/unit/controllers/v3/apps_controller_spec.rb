@@ -57,6 +57,18 @@ RSpec.describe AppsV3Controller, type: :controller do
       end
     end
 
+    context 'include space' do
+      it 'decorates the response with spaces' do
+        get :index, include: 'space'
+
+        space_guids = parsed_body['included']['spaces'].map { |s| s['guid'] }
+        expect(response.status).to eq(200)
+        expect(space_guids).to match_array([app_model_1.space_guid])
+      end
+
+      it 'does not include spaces if no one asks for them'
+    end
+
     context 'query params' do
       context 'invalid param format' do
         it 'returns 400' do

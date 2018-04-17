@@ -5,7 +5,7 @@ module VCAP::CloudController
     module V3
       class AppPresenter < BasePresenter
         def to_hash
-          {
+          hash = {
             guid: app.guid,
             name: app.name,
             state: app.desired_state,
@@ -24,9 +24,21 @@ module VCAP::CloudController
             },
             links: build_links
           }
+
+          with_includes(hash)
         end
 
         private
+
+        def with_includes(hash)
+          return hash unless @include&.member?(:space)
+
+          hash.merge({
+            included: {
+              spaces: [V3::Presenters::SpacePresenter.new(app.space).to_hash]
+            }
+          })
+        end
 
         def app
           @resource

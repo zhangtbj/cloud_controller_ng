@@ -50,6 +50,24 @@ module VCAP::CloudController::Presenters::V3
         expect(result[:lifecycle][:data][:buildpacks]).to eq(['git://***:***@github.com/repo', 'limabean'])
         expect(result[:relationships][:space][:data][:guid]).to eq(app.space.guid)
       end
+
+      describe 'include' do
+        context 'with include: space' do
+          let(:result) { AppPresenter.new(app, include: [:space]).to_hash }
+
+          it 'presents the space' do
+            expect(result[:included][:spaces]).to match_array([SpacePresenter.new(app.space).to_hash])
+          end
+        end
+
+        context 'without include' do
+          let(:result) { AppPresenter.new(app).to_hash }
+
+          it 'does not present any included resources' do
+            expect(result).not_to have_key(:included)
+          end
+        end
+      end
     end
   end
 end

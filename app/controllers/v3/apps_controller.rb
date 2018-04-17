@@ -9,6 +9,7 @@ require 'actions/app_apply_manifest'
 require 'actions/app_start'
 require 'actions/app_stop'
 require 'actions/set_current_droplet'
+require 'decorators/include_app_space_decorator'
 require 'messages/apps_list_message'
 require 'messages/app_update_message'
 require 'messages/app_create_message'
@@ -37,7 +38,13 @@ class AppsV3Controller < ApplicationController
                 AppListFetcher.new.fetch(message, readable_space_guids)
               end
 
-    render status: :ok, json: Presenters::V3::PaginatedListPresenter.new(dataset: dataset, path: '/v3/apps', message: message)
+    render status: :ok,
+      json: Presenters::V3::PaginatedListPresenter.new(
+        dataset: dataset,
+        path: '/v3/apps',
+        message: message,
+        decorators: [IncludeAppSpaceDecorator]
+      )
   end
 
   def show
