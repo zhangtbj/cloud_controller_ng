@@ -1,3 +1,4 @@
+require 'models/runtime/route_mapping_model'
 require 'cloud_controller/process_observer'
 require 'cloud_controller/database_uri_generator'
 require 'cloud_controller/errors/application_missing'

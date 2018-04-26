@@ -1,3 +1,4 @@
+require 'models/runtime/space'
 require 'cloud_controller/database_uri_generator'
 require 'models/helpers/process_types'
 

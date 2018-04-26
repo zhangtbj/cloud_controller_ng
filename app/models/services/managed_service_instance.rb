@@ -1,3 +1,4 @@
+require 'models/services/service_instance'
 require 'vcap/request'
 
 module VCAP::CloudController

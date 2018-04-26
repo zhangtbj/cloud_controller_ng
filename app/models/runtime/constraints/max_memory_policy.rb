@@ -1,3 +1,4 @@
+require 'models/runtime/task_model'
 require 'cloud_controller/app_services/app_memory_calculator'
 
 class BaseMaxMemoryPolicy
