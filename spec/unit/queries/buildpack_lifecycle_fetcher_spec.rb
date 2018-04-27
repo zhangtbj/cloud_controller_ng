@@ -19,6 +19,8 @@ module VCAP::CloudController
       end
 
       context 'when the stack and buildpack are not found' do
+        # XTEAM TODO: test name isn't clear: 'nil for both' but one returned item is non-nil
+        # what about testing the buildpack_record to be nil?
         it 'returns nil for both' do
           returned_hash = BuildpackLifecycleFetcher.fetch(['bogus-buildpack'], 'bogus-stack')
 
