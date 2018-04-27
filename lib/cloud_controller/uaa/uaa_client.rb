@@ -1,3 +1,5 @@
+require 'cloud_controller/uaa/uaa_timeout_scim'
+
 module VCAP::CloudController
   class UaaClient
     attr_reader :uaa_target, :client_id, :secret, :ca_file
@@ -10,7 +12,7 @@ module VCAP::CloudController
     end
 
     def scim
-      @scim ||= CF::UAA::Scim.new(uaa_target, token_info.auth_header, uaa_connection_opts)
+      @scim ||= UaaTimeoutScim(CF::UAA::Scim.new(uaa_target, token_info.auth_header, uaa_connection_opts), 100)
     end
 
     def get_clients(client_ids)

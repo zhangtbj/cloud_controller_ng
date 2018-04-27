@@ -18,7 +18,7 @@ module VCAP::CloudController
 
     describe '#scim' do
       it 'knows how to build a valid scim' do
-        scim = uaa_client.scim
+        scim = uaa_client.scim.uaa_core_scim
         expect(scim).to be_a(CF::UAA::Scim)
         expect(scim.instance_variable_get(:@target)).to eq(url)
         expect(scim.instance_variable_get(:@auth_header)).to eq(auth_header)
