@@ -100,7 +100,7 @@ module VCAP::CloudController
 
           context 'stack previously unknown' do
             let!(:buildpack) { VCAP::CloudController::Buildpack.create_from_hash({ name: 'upload_binary_buildpack', stack: nil, position: 0 }) }
-            context 'known' do
+            context 'and the stack exists' do
               let(:valid_zip_manifest_stack) { 'cflinuxfs3' }
               before do
                 VCAP::CloudController::Stack.create(name: 'cflinuxfs3')
@@ -126,7 +126,7 @@ module VCAP::CloudController
               end
             end
 
-            context 'non-existent buildpack' do
+            context "but the stack doesn't exist" do
               let(:valid_zip_manifest_stack) { 'new-and-unknown' }
               it 'raises an error' do
                 expect {

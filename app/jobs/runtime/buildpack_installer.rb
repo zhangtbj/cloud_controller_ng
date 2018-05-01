@@ -70,6 +70,7 @@ module VCAP::CloudController
             buildpacks_by_stack = Buildpack.where(name: name, stack: stack)
             return buildpacks_by_stack if buildpacks_by_stack.any?
             return Buildpack.where(name: name, stack: nil)
+            # XTEAM: We were reconsidering whether or not we should overwrite buildpacks of unknown stack during install
           end
 
           Buildpack.where(name: name)
