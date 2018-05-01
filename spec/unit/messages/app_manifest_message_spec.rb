@@ -23,7 +23,8 @@ module VCAP::CloudController
 
             expect(message).not_to be_valid
             expect(message.errors.count).to eq(1)
-            expect(message.errors.full_messages).to include('Memory must use a supported unit: B, K, KB, M, MB, G, GB, T, or TB')
+            expect(message.errors.full_messages).to include(
+              'Process "web": Memory must use a supported unit: B, K, KB, M, MB, G, GB, T, or TB')
           end
         end
 
@@ -35,7 +36,7 @@ module VCAP::CloudController
 
             expect(message).not_to be_valid
             expect(message.errors.count).to eq(1)
-            expect(message.errors.full_messages).to include('Memory must be greater than 0MB')
+            expect(message.errors.full_messages).to include('Process "web": Memory must be greater than 0MB')
           end
         end
 
@@ -47,7 +48,7 @@ module VCAP::CloudController
 
             expect(message).not_to be_valid
             expect(message.errors.count).to eq(1)
-            expect(message.errors.full_messages).to include('Memory must be greater than 0MB')
+            expect(message.errors.full_messages).to include('Process "web": Memory must be greater than 0MB')
           end
         end
       end
@@ -61,7 +62,9 @@ module VCAP::CloudController
 
             expect(message).not_to be_valid
             expect(message.errors.count).to eq(1)
-            expect(message.errors.full_messages).to include('Disk quota must use a supported unit: B, K, KB, M, MB, G, GB, T, or TB')
+            expect(message.errors.full_messages).to include(
+              'Process "web": Disk quota must use a supported unit: B, K, KB, M, MB, G, GB, T, or TB'
+            )
           end
         end
 
@@ -73,7 +76,7 @@ module VCAP::CloudController
 
             expect(message).not_to be_valid
             expect(message.errors.count).to eq(1)
-            expect(message.errors.full_messages).to include('Disk quota must be greater than 0MB')
+            expect(message.errors.full_messages).to include('Process "web": Disk quota must be greater than 0MB')
           end
         end
 
@@ -85,7 +88,7 @@ module VCAP::CloudController
 
             expect(message).not_to be_valid
             expect(message.errors.count).to eq(1)
-            expect(message.errors.full_messages).to include('Disk quota is not a number')
+            expect(message.errors.full_messages).to include('Process "web": Disk quota is not a number')
           end
         end
       end
@@ -149,7 +152,7 @@ module VCAP::CloudController
 
             expect(message).not_to be_valid
             expect(message.errors.count).to eq(1)
-            expect(message.errors.full_messages).to include('Instances is not a number')
+            expect(message.errors.full_messages).to include('Process "web": Instances is not a number')
           end
         end
 
@@ -161,7 +164,7 @@ module VCAP::CloudController
 
             expect(message).not_to be_valid
             expect(message.errors.count).to eq(1)
-            expect(message.errors.full_messages).to include('Instances must be an integer')
+            expect(message.errors.full_messages).to include('Process "web": Instances must be an integer')
           end
         end
 
@@ -173,7 +176,7 @@ module VCAP::CloudController
 
             expect(message).not_to be_valid
             expect(message.errors.count).to eq(1)
-            expect(message.errors.full_messages).to include('Instances must be greater than or equal to 0')
+            expect(message.errors.full_messages).to include('Process "web": Instances must be greater than or equal to 0')
           end
         end
       end
@@ -189,7 +192,7 @@ module VCAP::CloudController
             message = AppManifestMessage.new(params)
             expect(message).to_not be_valid
             expect(message.errors.count).to eq(1)
-            expect(message.errors.full_messages).to include('env must be a hash of keys and values')
+            expect(message.errors.full_messages).to include('Env must be a hash of keys and values')
           end
         end
 
@@ -405,8 +408,59 @@ module VCAP::CloudController
             message = AppManifestMessage.new(params)
             expect(message).to_not be_valid
             expect(message.errors.count).to eq(2)
-            expect(message.errors.full_messages).to include('totally-a-type Process Instances must be greater than or equal to 0')
-            expect(message.errors.full_messages).to include('totally-a-type Process Timeout must be greater than or equal to 1')
+            expect(message.errors.full_messages).to include('Process "totally-a-type": Instances must be greater than or equal to 0')
+            expect(message.errors.full_messages).to include('Process "totally-a-type": Timeout must be greater than or equal to 1')
+          end
+
+          context 'when processes attributes are invalid' do
+            let(:process1) do
+              {
+                'type' => 'type1',
+                'instances' => -30,
+                'memory' => 'potato',
+                'disk_quota' => '100',
+                'health_check_type' => 'sweet_potato',
+                'health_check_http_endpoint' => '/healthcheck_potato',
+                'command' => '',
+                'timeout' => 'yam'
+              }
+            end
+            let(:process2) do
+              {
+                'type' => 'type2',
+                'instances' => 'cassava',
+                'memory' => 'potato',
+                'disk_quota' => '100',
+                'health_check_type' => 'sweet_potato',
+                'health_check_http_endpoint' => '/healthcheck_potato',
+                'command' => '',
+                'timeout' => 'yam'
+              }
+            end
+            let(:params) { { processes: [process1, process2] } }
+
+            it 'includes the type of the process in the error message' do
+              message = AppManifestMessage.new(params)
+              expect(message).to_not be_valid
+              expect(message.errors.count).to eq(14)
+              expect(message.errors.full_messages).to match_array([
+                'Process "type1": Command must be between 1 and 4096 characters',
+                'Process "type1": Disk quota must use a supported unit: B, K, KB, M, MB, G, GB, T, or TB',
+                'Process "type1": Instances must be greater than or equal to 0',
+                'Process "type1": Memory is not a number',
+                'Process "type1": Timeout is not a number',
+                'Process "type1": Health check type must be "port", "process", or "http"',
+                'Process "type1": Health check type must be "http" to set a health check HTTP endpoint',
+
+                'Process "type2": Command must be between 1 and 4096 characters',
+                'Process "type2": Disk quota must use a supported unit: B, K, KB, M, MB, G, GB, T, or TB',
+                'Process "type2": Instances is not a number',
+                'Process "type2": Memory is not a number',
+                'Process "type2": Timeout is not a number',
+                'Process "type2": Health check type must be "port", "process", or "http"',
+                'Process "type2": Health check type must be "http" to set a health check HTTP endpoint',
+              ])
+            end
           end
         end
 
@@ -420,8 +474,8 @@ module VCAP::CloudController
             message = AppManifestMessage.new(params)
             expect(message).to_not be_valid
             expect(message.errors.count).to eq(2)
-            expect(message.errors.full_messages).to include('foo Process may only be present once')
-            expect(message.errors.full_messages).to include('bob Process may only be present once')
+            expect(message.errors.full_messages).to include('Process "foo" may only be present once')
+            expect(message.errors.full_messages).to include('Process "bob" may only be present once')
           end
         end
       end
@@ -444,12 +498,12 @@ module VCAP::CloudController
           expect(message).not_to be_valid
           expect(message.errors.count).to eq(6)
           expect(message.errors.full_messages).to match_array([
-            'Instances must be greater than or equal to 0',
-            'Memory must use a supported unit: B, K, KB, M, MB, G, GB, T, or TB',
-            'Disk quota must be greater than 0MB',
+            'Process "web": Instances must be greater than or equal to 0',
+            'Process "web": Memory must use a supported unit: B, K, KB, M, MB, G, GB, T, or TB',
+            'Process "web": Disk quota must be greater than 0MB',
             'Buildpacks can only contain strings',
             'Stack must be a string',
-            'env must be a hash of keys and values',
+            'Env must be a hash of keys and values',
           ])
         end
       end
@@ -472,6 +526,134 @@ module VCAP::CloudController
 
         expect(message.requested?(:instances)).to be_truthy
         expect(message.requested?(:memory)).to be_truthy
+      end
+    end
+
+    describe '.underscore_keys' do
+      let(:parsed_yaml) { { name: 'blah', 'health-check-type': 'port', disk_quota: '23M' } }
+
+      it 'converts all keys to snake case' do
+        expect(AppManifestMessage.underscore_keys(parsed_yaml)).to eq(
+          {
+            name: 'blah',
+            health_check_type: 'port',
+            disk_quota: '23M',
+          }
+        )
+      end
+
+      context 'with processes' do
+        let(:parsed_yaml) do
+          { name: 'blah', processes: [
+            { type: 'web', 'health-check-type': 'port', disk_quota: '23M' },
+            { type: 'worker', 'health-check-type': 'port', disk_quota: '23M' },
+          ] }
+        end
+
+        it 'converts the processes keys into snake case for all processes' do
+          expect(AppManifestMessage.underscore_keys(parsed_yaml)).to eq(
+            { name: 'blah',
+              processes: [
+                { type: 'web',
+                  health_check_type: 'port',
+                  disk_quota: '23M', },
+                { type: 'worker',
+                  health_check_type: 'port',
+                  disk_quota: '23M', },
+              ]
+            }
+          )
+        end
+      end
+
+      context 'with environment variables' do
+        let(:parsed_yaml) do
+          { name: 'blah', env: { ':ENV_VAR' => 'hunter1' }, processes: [
+            { type: 'web', env: { ':ENV_VAR' => 'hunter2' } },
+            { type: 'worker', env: { ':ENV_VAR' => 'hunter3' } },
+          ] }
+        end
+
+        it 'does NOT try to underscore them (so they do NOT get lowercased)' do
+          expect(AppManifestMessage.underscore_keys(parsed_yaml)).to eq(
+            { name: 'blah',
+              env: { ':ENV_VAR' => 'hunter1' },
+              processes: [
+                { type: 'web',
+                  env: { ':ENV_VAR' => 'hunter2' }, },
+                { type: 'worker',
+                  env: { ':ENV_VAR' => 'hunter3' }, },
+              ]
+            }
+          )
+        end
+      end
+
+      context 'with services' do
+        let(:parsed_yaml) do
+          { name: 'blah', services: ['hadoop'], processes: [
+            { type: 'web', services: ['greenplumbdb'] },
+            { type: 'worker', services: ['riak'] },
+          ] }
+        end
+
+        it 'does NOT try to underscore the service names (they are strings not hashes)' do
+          expect(AppManifestMessage.underscore_keys(parsed_yaml)).to eq(
+            { name: 'blah',
+              services: ['hadoop'],
+              processes: [
+                { type: 'web',
+                  services: ['greenplumbdb'], },
+                { type: 'worker',
+                  services: ['riak'], },
+              ]
+            }
+          )
+        end
+      end
+
+      context 'when processes is incorrectly not an array' do
+        context 'when nil' do
+          let(:parsed_yaml) do
+            { name: 'blah', processes: nil }
+          end
+
+          it 'does NOT raise an error' do
+            expect(AppManifestMessage.underscore_keys(parsed_yaml)).to eq(
+              { name: 'blah',
+                processes: nil
+              }
+            )
+          end
+        end
+
+        context 'when hash' do
+          let(:parsed_yaml) do
+            { name: 'blah', processes: {'web': {'woop-de': 'doop'}} }
+          end
+
+          it 'does NOT raise an error, but does not underscore anything' do
+            expect(AppManifestMessage.underscore_keys(parsed_yaml)).to eq(
+              { name: 'blah',
+                processes: {'web': {'woop-de': 'doop'}}
+              }
+            )
+          end
+        end
+
+        context 'when string' do
+          let(:parsed_yaml) do
+            { name: 'blah', processes: 'i am process' }
+          end
+
+          it 'does NOT raise an error' do
+            expect(AppManifestMessage.underscore_keys(parsed_yaml)).to eq(
+              { name: 'blah',
+                processes: 'i am process'
+              }
+            )
+          end
+        end
       end
     end
 
@@ -526,7 +708,9 @@ module VCAP::CloudController
 
             expect(message).not_to be_valid
             expect(message.errors.count).to eq(2)
-            expect(message.errors.full_messages).to match_array(['Memory must be greater than 0MB', 'Disk quota must be greater than 0MB'])
+            expect(message.errors.full_messages).to match_array([
+              'Process "web": Memory must be greater than 0MB',
+              'Process "web": Disk quota must be greater than 0MB'])
           end
         end
 
@@ -591,7 +775,9 @@ module VCAP::CloudController
 
             expect(message).not_to be_valid
             expect(message.errors.count).to eq(2)
-            expect(message.errors.full_messages).to match_array(['Memory must be greater than 0MB', 'Disk quota must be greater than 0MB'])
+            expect(message.errors.full_messages).to match_array([
+              'Process "web": Memory must be greater than 0MB',
+              'Process "web": Disk quota must be greater than 0MB'])
           end
         end
 
@@ -716,6 +902,18 @@ module VCAP::CloudController
               expect(message.manifest_process_update_messages.length).to eq(1)
               expect(message.manifest_process_update_messages.first.health_check_type).to eq('port')
               expect(message.manifest_process_update_messages.first.health_check_endpoint).to be_nil
+            end
+          end
+
+          context 'when the health check type is nonsense' do
+            let(:parsed_yaml) { { 'health-check-type' => 'nonsense' } }
+
+            it 'returns the error' do
+              message = AppManifestMessage.create_from_yml(parsed_yaml)
+              expect(message).to_not be_valid
+              expect(message.errors.full_messages).to include(
+                'Process "web": Health check type must be "port", "process", or "http"'
+              )
             end
           end
         end

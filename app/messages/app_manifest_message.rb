@@ -41,7 +41,11 @@ module VCAP::CloudController
     def self.underscore_keys(hash)
       hash.inject({}) do |memo, (key, val)|
         new_key = key.to_s.underscore.to_sym
-        memo[new_key] = val.is_a?(Array) ? val.map { |k| underscore_keys(k) } : val
+        memo[new_key] = if key == :processes && val.is_a?(Array)
+                          val.map { |process| underscore_keys(process) }
+                        else
+                          val
+                        end
         memo
       end
     end
@@ -72,11 +76,15 @@ module VCAP::CloudController
     private
 
     def process_scale_attribute_mappings
-      process_attributes(process_scale_attributes_from_app_level) { |process| process_scale_attributes_from_process(process) }
+      process_attributes(process_scale_attributes_from_app_level) do |process|
+        process_scale_attributes_from_process(process)
+      end
     end
 
     def process_update_attribute_mappings
-      process_attributes(process_update_attributes_from_app_level) { |process| process_update_attributes_from_process(process) }
+      process_attributes(process_update_attributes_from_app_level) do |process|
+        process_update_attributes_from_process(process)
+      end
     end
 
     def process_attributes(app_attributes)
@@ -95,20 +103,33 @@ module VCAP::CloudController
     end
 
     def process_scale_attributes_from_app_level
+      memory_in_mb, memory_error = convert_to_mb(memory, 'Memory')
+      disk_in_mb, disk_error = convert_to_mb(disk_quota, 'Disk quota')
+      add_process_error!(memory_error, 'web') if memory_error
+      add_process_error!(disk_error, 'web') if disk_error
       {
         instances: instances,
-        memory: convert_to_mb(memory, 'Memory'),
-        disk_quota: convert_to_mb(disk_quota, 'Disk quota'),
+        memory: memory_in_mb,
+        disk_quota: disk_in_mb,
       }.compact
     end
 
     def process_scale_attributes_from_process(process)
+      type = process[:type]
+      memory_in_mb, memory_error = convert_to_mb(process[:memory], 'Memory')
+      disk_in_mb, disk_error = convert_to_mb(process[:disk_quota], 'Disk quota')
+      add_process_error!(memory_error, type) if memory_error
+      add_process_error!(disk_error, type) if disk_error
       {
         instances: process[:instances],
-        memory: convert_to_mb(process[:memory], 'Memory'),
-        disk_quota: convert_to_mb(process[:disk_quota], 'Disk quota'),
-        type: process[:type]
+        memory: memory_in_mb,
+        disk_quota: disk_in_mb,
+        type: type
       }.compact
+    end
+
+    def add_process_error!(memory_error, type)
+      errors.add(:base, %(Process "#{type}": #{memory_error}))
     end
 
     def process_update_attributes_from_app_level
@@ -187,14 +208,11 @@ module VCAP::CloudController
     end
 
     def convert_to_mb(human_readable_byte_value, attribute)
-      byte_converter.convert_to_mb(human_readable_byte_value)
+      return byte_converter.convert_to_mb(human_readable_byte_value), nil
     rescue ByteConverter::InvalidUnitsError
-      errors.add(:base, "#{attribute} must use a supported unit: B, K, KB, M, MB, G, GB, T, or TB")
-
-      nil
+      return nil, "#{attribute} must use a supported unit: B, K, KB, M, MB, G, GB, T, or TB"
     rescue ByteConverter::NonNumericError
-      errors.add(:base, "#{attribute} is not a number")
-      nil
+      return nil, "#{attribute} is not a number"
     end
 
     def byte_converter
@@ -202,19 +220,18 @@ module VCAP::CloudController
     end
 
     def validate_manifest_process_scale_message!
-      manifest_process_scale_messages.each do |msg|
-        msg.valid?
-        msg.errors.full_messages.each do |error_message|
-          errors.add(:base, "#{msg.type} Process #{error_message}")
-        end
-      end
+      validate_messages!(manifest_process_scale_messages)
     end
 
     def validate_manifest_process_update_message!
-      manifest_process_update_messages.each do |msg|
+      validate_messages!(manifest_process_update_messages)
+    end
+
+    def validate_messages!(messages)
+      messages.each do |msg|
         msg.valid?
         msg.errors.full_messages.each do |error_message|
-          errors.add(:base, "#{msg.type} Process #{error_message}")
+          add_process_error!(error_message, msg.type)
         end
       end
     end
@@ -240,7 +257,7 @@ module VCAP::CloudController
       app_update_environment_variables_message.valid?
       app_update_environment_variables_message.errors[:var].each do |error_message|
         if error_message == 'must be a hash'
-          errors[:base] << 'env must be a hash of keys and values'
+          errors[:base] << 'Env must be a hash of keys and values'
         else
           errors[:env] << error_message
         end
@@ -260,7 +277,7 @@ module VCAP::CloudController
 
         processes.group_by { |p| p[:type] }.
           select { |k, v| v.length > 1 }.
-          each_key { |k| errors.add(:base, "#{k} Process may only be present once") }
+          each_key { |k| errors.add(:base, %(Process "#{k}" may only be present once)) }
 
       else
         errors.add(:base, 'Processes must be an array of process configurations')
