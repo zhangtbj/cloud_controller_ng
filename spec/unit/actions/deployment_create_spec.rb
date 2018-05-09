@@ -6,8 +6,8 @@ module VCAP::CloudController
     subject(:action) do
       DeploymentCreate.new
     end
-    let(:app) {VCAP::CloudController::AppModel.make(droplet: droplet)}
-    let(:droplet) {VCAP::CloudController::DropletModel.make}
+    let(:app) { VCAP::CloudController::AppModel.make(droplet: droplet) }
+    let(:droplet) { VCAP::CloudController::DropletModel.make }
 
     describe '#create' do
       it 'creates a deployment' do
@@ -15,7 +15,7 @@ module VCAP::CloudController
 
         expect {
           deployment = action.create(app: app)
-        }.to change {DeploymentModel.count}.by(1)
+        }.to change { DeploymentModel.count }.by(1)
 
         expect(deployment.state).to eq(DeploymentModel::DEPLOYING_STATE)
         expect(deployment.app_guid).to eq(app.guid)
@@ -27,9 +27,9 @@ module VCAP::CloudController
 
         expect {
           deployment = action.create(app: app)
-        }.to change {ProcessModel.count}.by(1)
+        }.to change { ProcessModel.count }.by(1)
 
-        expect(app.processes.collect {|p| p.type}).to include("web-deployment-#{deployment.guid}")
+        expect(app.processes.collect(&:type)).to include("web-deployment-#{deployment.guid}")
       end
     end
   end

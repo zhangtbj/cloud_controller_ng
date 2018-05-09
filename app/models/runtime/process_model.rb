@@ -370,8 +370,16 @@ module VCAP::CloudController
       command || detected_start_command
     end
 
+    def undeployed_type
+      if ProcessTypes.webish?(self.type)
+        ProcessTypes::WEB
+      else
+        self.type
+      end
+    end
+
     def detected_start_command
-      current_droplet.try(:process_types).try(:[], self.type) || ''
+      current_droplet.try(:process_types).try(:[], self.undeployed_type) || ''
     end
 
     def detected_buildpack_guid
@@ -536,7 +544,7 @@ module VCAP::CloudController
     end
 
     def web?
-      type == ProcessTypes::WEB
+      ProcessTypes.webish?(type)
     end
 
     private
