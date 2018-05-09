@@ -13,14 +13,8 @@ module VCAP::CloudController
 
           http_info = []
           tcp_info = []
-          process_routes = process.routes
-          routes_by_association = if ProcessTypes.webish?(process.type)
-                                    ProcessModel.find(app: process.app, type: 'web').routes
-                                  end
 
-          routes_to_use = process_routes.join(routes_by_association)
-
-          routes_to_use.reject(&:internal?).each do |r|
+          process.routes.reject(&:internal?).each do |r|
             route_app_port_map[r.guid].each do |app_port|
               if r.domain.is_a?(SharedDomain) && !r.domain.router_group_guid.nil?
                 if r.domain.tcp? && !route_app_port_map[r.guid].blank?
@@ -45,7 +39,7 @@ module VCAP::CloudController
           end
 
           internal_routes = []
-          routes_to_use.select(&:internal?).each do |r|
+          process.routes.select(&:internal?).each do |r|
             internal_routes << { 'hostname' => "#{r.host}.#{r.domain.name}" }
           end
 

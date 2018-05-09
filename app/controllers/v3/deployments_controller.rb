@@ -27,7 +27,7 @@ class DeploymentsController < ApplicationController
     app = AppModel.find(guid: app_guid)
     unprocessable!('Unable to use app. Ensure that the app exists and you have access to it.') unless app && can_write?(app.space.guid)
 
-    deployment = DeploymentCreate.new.create(app: app)
+    deployment = DeploymentCreate.create(app: app, user_audit_info: user_audit_info)
 
     response = Presenters::V3::DeploymentPresenter.new(deployment)
 

@@ -20,7 +20,6 @@ module VCAP::CloudController
       end
 
       def start(_={})
-        $stderr.puts("Starting guid: #{@process.guid} type: #{@process.type}")
         with_logging('start') { messenger.send_desire_request(@process, @config) }
       end
 

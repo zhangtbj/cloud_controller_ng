@@ -3,7 +3,7 @@ module VCAP::CloudController
     WEB = 'web'.freeze
 
     def self.webish?(type)
-      return type == WEB || type.match?(/web-deployment/)
+      type == WEB || type.starts_with?('web-deployment-')
     end
   end
 end
