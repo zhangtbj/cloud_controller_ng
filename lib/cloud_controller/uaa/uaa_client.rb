@@ -1,3 +1,5 @@
+require 'openid_connect'
+
 module VCAP::CloudController
   class UaaClient
     attr_reader :uaa_target, :client_id, :secret, :ca_file, :http_timeout
@@ -73,14 +75,29 @@ module VCAP::CloudController
     private
 
     def token_issuer
-      CF::UAA::TokenIssuer.new(uaa_target, client_id, secret, uaa_connection_opts)
+      OpenIDConnect.http_config do |config|
+        config.ssl_config.add_trust_ca('/tmp/ca_cert')
+      end
+
+      OpenIDConnect::Client.new({
+        identifier: 'cloud_controller_username_lookup',
+        secret: 'KTjgclymXcppWJaV9uWT7sQp1zKY7P',
+        host: 'uaa.oil-turner.perm.cf-app.com',
+        token_endpoint: '/oauth/token',
+      })
+      #   # redirect_uri
+      #   # authorization_endpoint
+      #   # token_endpoint
+      #   # userinfo_endpoint
+      # CF::UAA::TokenIssuer.new(uaa_target, client_id, secret, uaa_connection_opts)
     end
 
     def uaa_connection_opts
       {
-        skip_ssl_validation: false,
+        skip_ssl_validation: true,
         ssl_ca_file:         ca_file,
-        http_timeout:        http_timeout
+        http_timeout:        http_timeout,
+
       }
     end
 

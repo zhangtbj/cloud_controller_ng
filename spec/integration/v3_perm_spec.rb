@@ -601,7 +601,7 @@ RSpec.describe 'Perm', type: :integration, skip: skip_perm_tests, perm: skip_per
     }.to_json
 
     response = make_post_request('/v2/users', body, admin_headers)
-    expect(response.code).to eq('201')
+    expect(response.code).to eq('201'), response.json_body
 
     response.json_body['metadata']['guid']
   end

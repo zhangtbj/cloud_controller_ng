@@ -53,6 +53,8 @@ gem 'fog-google'
 gem 'fog-local'
 gem 'fog-openstack'
 
+gem 'openid_connect', '~> 1'
+
 gem 'cf-uaa-lib', '~> 3.14.0'
 gem 'vcap-concurrency', git: 'https://github.com/cloudfoundry/vcap-concurrency.git', ref: '2a5b0179'
 
