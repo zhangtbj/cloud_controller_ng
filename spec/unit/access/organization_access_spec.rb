@@ -5,9 +5,52 @@ module VCAP::CloudController
     subject(:access) { OrganizationAccess.new(Security::AccessContext.new) }
     let(:scopes) { ['cloud_controller.read', 'cloud_controller.write'] }
     let(:user) { VCAP::CloudController::User.make }
-    let(:object) { VCAP::CloudController::Organization.make }
+    let(:org) { VCAP::CloudController::Organization.make }
+    let(:object) { org }
+    let(:space) { VCAP::CloudController::Space.make(organization: org) }
 
     before { set_current_user(user, scopes: scopes) }
+
+    index_table = {
+      unauthenticated: false,
+      reader_and_writer: false,
+      reader: false,
+      writer: false,
+
+      admin: true,
+      admin_read_only: true,
+      global_auditor: true,
+
+      space_developer: true,
+      space_manager: true,
+      space_auditor: true,
+      org_user: true,
+      org_manager: true,
+      org_auditor: true,
+      org_billing_manager: true,
+    }
+
+    read_table = {
+      unauthenticated: false,
+      reader_and_writer: true,
+      reader: true,
+      writer: false,
+
+      admin: true,
+      admin_read_only: true,
+      global_auditor: true,
+
+      space_developer: true,
+      space_manager: true,
+      space_auditor: true,
+      org_user: true,
+      org_manager: true,
+      org_auditor: true,
+      org_billing_manager: true,
+    }
+
+    # it_behaves_like('an access control', :index, index_table)
+    it_behaves_like('an access control', :read, read_table)
 
     shared_examples :read_and_create_only do
       it { is_expected.to allow_op_on_object :create, object }
