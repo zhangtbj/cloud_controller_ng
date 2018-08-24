@@ -67,6 +67,7 @@ module VCAP::CloudController
           opi: {
             enabled: bool,
             url: String,
+            opi_staging: bool,
           },
 
           default_app_memory: Integer,
