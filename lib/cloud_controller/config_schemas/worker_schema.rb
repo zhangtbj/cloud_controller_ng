@@ -156,6 +156,7 @@ module VCAP::CloudController
           opi: {
             enabled: bool,
             url: String,
+            opi_staging: bool,
           },
 
           allow_app_ssh_access: bool,

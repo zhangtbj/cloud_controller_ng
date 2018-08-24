@@ -253,6 +253,7 @@ diego:
 opi:
   enabled: false
   url: http://opi.service.cf.internal
+  opi_staging: false
 
 directories:
   tmpdir: /tmp
