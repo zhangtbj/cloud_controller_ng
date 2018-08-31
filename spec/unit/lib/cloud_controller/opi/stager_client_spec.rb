@@ -1,19 +1,29 @@
 require 'spec_helper'
 require 'cloud_controller/opi/stager_client'
-require 'cloud_controller/diego/staging_request'
 
 RSpec.describe(OPI::StagerClient) do
   let(:eirini_url) { 'http://eirini.loves.heimdall:777' }
-  subject(:stager_client) { described_class.new(eirini_url) }
+  let(:staging_details) { stub_staging_details }
+  let(:staging_request) { stub_staging_request }
+
+  let(:protocol) { instance_double(VCAP::CloudController::Diego::Protocol) }
+  let(:config) { instance_double(VCAP::CloudController::Config) }
+
+  subject(:stager_client) { described_class.new(eirini_url, config) }
 
   context 'when staging an app' do
     before do
+      allow(VCAP::CloudController::Diego::Protocol).to receive(:new).and_return(protocol)
+      allow(protocol).to receive(:stage_package_request).
+        with(config, staging_details).
+        and_return(staging_request)
+
       stub_request(:post, "#{eirini_url}/stage/guid").
         to_return(status: 200)
     end
 
     it 'should send the expected request' do
-      stager_client.stage('guid', staging_request)
+      stager_client.stage('guid', staging_details)
       expect(WebMock).to have_requested(:post, "#{eirini_url}/stage/guid").with(body: {
         app_id: 'thor',
         file_descriptors: 2,
@@ -30,33 +40,42 @@ RSpec.describe(OPI::StagerClient) do
       }.to_json
       )
     end
+
+    context 'when the response contains an error' do
+      before do
+        stub_request(:post, "#{eirini_url}/stage/guid").
+          to_return(status: 501, body: { 'error' => 'argh' }.to_json)
+      end
+
+      it 'should raise an error' do
+        expect { stager_client.stage('guid', staging_details) }.to raise_error(CloudController::Errors::ApiError)
+      end
+    end
   end
 
-  context 'when the response contains an error' do
-    before do
-      stub_request(:post, "#{eirini_url}/stage/guid").
-        to_return(status: 501, body: { 'error' => 'argh' }.to_json)
-    end
-
-    it 'should raise an error' do
-      expect { stager_client.stage('guid', staging_request) }.to raise_error(CloudController::Errors::ApiError)
-    end
-  end
-
-  def staging_request
-    staging_request = VCAP::CloudController::Diego::StagingRequest.new
+  def stub_staging_request
+    staging_request                     = VCAP::CloudController::Diego::StagingRequest.new
     staging_request.app_id              = 'thor'
     staging_request.log_guid            = 'is the actual app id'
-    staging_request.file_descriptors = 2
-    staging_request.memory_mb            = 420
-    staging_request.disk_mb              = 42
-    staging_request.environment          = [{ 'name' => 'eirini', 'value' => 'some' }]
-    staging_request.timeout = 10
-    staging_request.lifecycle = 'example-lifecycle'
-    staging_request.lifecycle_data = { 'download-url' => 'soundcloud.com' }
+    staging_request.file_descriptors    = 2
+    staging_request.memory_mb           = 420
+    staging_request.disk_mb             = 42
+    staging_request.environment         = [{ 'name' => 'eirini', 'value' => 'some' }]
+    staging_request.timeout             = 10
+    staging_request.lifecycle           = 'example-lifecycle'
+    staging_request.lifecycle_data      = { 'download-url' => 'soundcloud.com' }
     staging_request.completion_callback = 'completed'
-    staging_request.egress_rules = ['rule-1', 'rule-2']
-    staging_request.isolation_segment = 'isolation'
+    staging_request.egress_rules        = ['rule-1', 'rule-2']
+    staging_request.isolation_segment   = 'isolation'
     staging_request
+  end
+
+  def stub_staging_details
+    staging_details                                 = VCAP::CloudController::Diego::StagingDetails.new
+    staging_details.staging_guid                    = 'thor'
+    staging_details.staging_memory_in_mb            = 420
+    staging_details.staging_disk_in_mb              = 42
+    staging_details.environment_variables           = { 'doesnt': 'matter' }
+    staging_details
   end
 end
