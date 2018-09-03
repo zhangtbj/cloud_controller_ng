@@ -4,7 +4,7 @@ require 'cloud_controller/opi/stager_client'
 RSpec.describe(OPI::StagerClient) do
   let(:eirini_url) { 'http://eirini.loves.heimdall:777' }
   let(:staging_details) { stub_staging_details }
-  let(:staging_request) { stub_staging_request }
+  let(:staging_request) { stub_staging_request_hash }
 
   let(:protocol) { instance_double(VCAP::CloudController::Diego::Protocol) }
   let(:config) { instance_double(VCAP::CloudController::Config) }
@@ -53,21 +53,21 @@ RSpec.describe(OPI::StagerClient) do
     end
   end
 
-  def stub_staging_request
-    staging_request                     = VCAP::CloudController::Diego::StagingRequest.new
-    staging_request.app_id              = 'thor'
-    staging_request.log_guid            = 'is the actual app id'
-    staging_request.file_descriptors    = 2
-    staging_request.memory_mb           = 420
-    staging_request.disk_mb             = 42
-    staging_request.environment         = [{ 'name' => 'eirini', 'value' => 'some' }]
-    staging_request.timeout             = 10
-    staging_request.lifecycle           = 'example-lifecycle'
-    staging_request.lifecycle_data      = { 'download-url' => 'soundcloud.com' }
-    staging_request.completion_callback = 'completed'
-    staging_request.egress_rules        = ['rule-1', 'rule-2']
-    staging_request.isolation_segment   = 'isolation'
-    staging_request
+  def stub_staging_request_hash
+    {
+        app_id: 'thor',
+        file_descriptors: 2,
+        memory_mb: 420,
+        disk_mb: 42,
+        environment: [{ 'name' => 'eirini', 'value' => 'some' }],
+        timeout: 10,
+        log_guid: 'is the actual app id',
+        lifecycle: 'example-lifecycle',
+        completion_callback: 'completed',
+        lifecycle_data: { 'download-url' => 'soundcloud.com' },
+        egress_rules: ['rule-1', 'rule-2'],
+        isolation_segment: 'isolation'
+    }
   end
 
   def stub_staging_details
