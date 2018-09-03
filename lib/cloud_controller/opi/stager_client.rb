@@ -12,7 +12,7 @@ module OPI
 
     def stage(staging_guid, staging_details)
       staging_request = to_request(staging_details)
-      payload = MultiJson.dump(staging_request.message)
+      payload = MultiJson.dump(staging_request)
 
       response = @client.post("/stage/#{staging_guid}", body: payload)
       if response.status_code != 200
