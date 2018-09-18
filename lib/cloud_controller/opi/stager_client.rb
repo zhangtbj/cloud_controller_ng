@@ -17,7 +17,7 @@ module OPI
 
       payload = MultiJson.dump(staging_request)
       response = @client.post("/stage/#{staging_guid}", body: payload)
-      if response.status_code != 201
+      if response.status_code != 202
         response_json = OPI.recursive_ostruct(JSON.parse(response.body))
         raise CloudController::Errors::ApiError.new_from_details('RunnerError', response_json)
       end
