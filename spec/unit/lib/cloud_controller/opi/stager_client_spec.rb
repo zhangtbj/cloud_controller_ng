@@ -34,7 +34,7 @@ RSpec.describe(OPI::StagerClient) do
         log_guid: 'is the actual app id',
         lifecycle: 'example-lifecycle',
         completion_callback: 'completed',
-        lifecycle_data: {'droplet_upload_uri' => 'https://cc-uploader.service.cf.internal:9091/v1/droplet/guid?cc-droplet-upload-uri=example.com/upload'},
+        lifecycle_data: { 'droplet_upload_uri' => 'https://cc-uploader.service.cf.internal:9091/v1/droplet/guid?cc-droplet-upload-uri=example.com/upload' },
         egress_rules: ['rule-1', 'rule-2'],
         isolation_segment: 'isolation'
       }.to_json
