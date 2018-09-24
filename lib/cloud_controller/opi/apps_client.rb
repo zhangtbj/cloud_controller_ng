@@ -72,7 +72,8 @@ module OPI
         health_check_type: process.health_check_type,
         health_check_http_endpoint: process.health_check_http_endpoint,
         health_check_timeout_ms: timeout_ms,
-        last_updated: process.updated_at.to_f.to_s
+        last_updated: process.updated_at.to_f.to_s,
+        volume_mounts: generate_volume_mounts(process)
       }
       MultiJson.dump(body)
     end
@@ -127,6 +128,28 @@ module OPI
 
     def process_guid(process)
       "#{process.guid}-#{process.version}"
+    end
+
+    def generate_volume_mounts(process)
+      app_volume_mounts   = VCAP::CloudController::Diego::Protocol::AppVolumeMounts.new(process.app).as_json
+      proto_volume_mounts = []
+
+      app_volume_mounts.each do |volume_mount|
+        proto_volume_mount = ::Diego::Bbs::Models::VolumeMount.new(
+          driver:        volume_mount['driver'],
+          container_dir: volume_mount['container_dir'],
+          mode:          volume_mount['mode']
+        )
+
+        mount_config              = volume_mount['device']['mount_config'].present? ? volume_mount['device']['mount_config'].to_json : ''
+        proto_volume_mount.shared = ::Diego::Bbs::Models::SharedDevice.new(
+          volume_id:    volume_mount['device']['volume_id'],
+          mount_config: mount_config
+        )
+        proto_volume_mounts.append(proto_volume_mount)
+      end
+
+      proto_volume_mounts
     end
 
     def logger
