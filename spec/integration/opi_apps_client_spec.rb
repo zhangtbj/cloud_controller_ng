@@ -42,37 +42,36 @@ RSpec.describe(OPI::Client, opi: skip_opi_tests) do
 
   context 'OPI system tests' do
     context 'Desire an app' do
-      let(:droplet) {
-        VCAP::CloudController::DropletModel.new(
-          docker_receipt_image: 'http://example.org/image1234',
-          droplet_hash: 'd_haash',
-          guid: 'some-droplet-guid'
-        )
+      let(:cfg) { ::VCAP::CloudController::Config.new({ default_health_check_timeout: 99 }) }
+      let(:lifecycle_type) { nil }
+      let(:app_model) {
+        ::VCAP::CloudController::AppModel.make(lifecycle_type,
+                                               guid: 'app-guid',
+                                               droplet: ::VCAP::CloudController::DropletModel.make(state: 'STAGED'),
+                                               enable_ssh: false,
+                                               environment_variables: { 'BISH': 'BASH', 'FOO': 'BAR' })
       }
 
-      let(:lrp) {
-        double(
-          guid: 'guid_1234',
-          name: 'jeff',
-          version: '0.1.0',
-          current_droplet: droplet,
-          specified_or_detected_command: 'ls -la',
-          environment_json: { 'PORT': 8080, 'FOO': 'BAR' },
-          health_check_type: 'port',
-          health_check_http_endpoint: '/healthz',
-          health_check_timeout: 420,
-          desired_instances: 4,
-          disk_quota: 100,
-          memory: 256,
-          file_descriptors: 0xBAAAAAAD,
-          uris: [],
-          space: double(
-            name: 'name',
-            guid: 'guid',
-          ),
-          updated_at: Time.at(1529064800.9),
-       )
-      }
+      let(:lrp) do
+        lrp = ::VCAP::CloudController::ProcessModel.make(:process,
+          app:                  app_model,
+          state:                'STARTED',
+          diego:                false,
+          guid:                 'process-guid',
+          type:                 'web',
+          health_check_timeout: 12,
+          instances:            21,
+          memory:               128,
+          disk_quota:           256,
+          command:              'ls -la',
+          file_descriptors:     32,
+          health_check_type:    'port',
+          enable_ssh:           false,
+        )
+        lrp.this.update(updated_at: Time.at(2))
+        lrp.reload
+      end
+
       it 'does not error' do
         expect { client.desire_app(lrp) }.to_not raise_error
       end
