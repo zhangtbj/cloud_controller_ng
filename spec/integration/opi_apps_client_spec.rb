@@ -3,6 +3,7 @@ require 'spec_helper'
 $LOAD_PATH.unshift('app')
 
 require 'cloud_controller/opi/apps_client'
+require 'models/runtime/droplet_model'
 
 # This spec requires the OPI binary to be in $PATH
 skip_opi_tests = ENV['CF_RUN_OPI_SPECS'] != 'true'
@@ -39,12 +40,18 @@ RSpec.describe(OPI::Client, opi: skip_opi_tests) do
 
   context 'OPI system tests' do
     context 'Desire an app' do
-      let(:cfg) { ::VCAP::CloudController::Config.new({ default_health_check_timeout: 99 }) }
+      let(:droplet) {
+        VCAP::CloudController::DropletModel.make(
+          docker_receipt_image: 'http://example.org/image1234',
+          droplet_hash: 'd_haash',
+          guid: 'some-droplet-guid'
+        )
+      }
       let(:lifecycle_type) { nil }
       let(:app_model) {
         ::VCAP::CloudController::AppModel.make(lifecycle_type,
                                                guid: 'app-guid',
-                                               droplet: ::VCAP::CloudController::DropletModel.make(state: 'STAGED'),
+                                               droplet: droplet,
                                                enable_ssh: false,
                                                environment_variables: { 'BISH': 'BASH', 'FOO': 'BAR' })
       }

@@ -6,13 +6,19 @@ RSpec.describe(OPI::Client) do
     subject(:client) { described_class.new(opi_url) }
     let(:opi_url) { 'http://opi.service.cf.internal:8077' }
     let(:img_url) { 'http://example.org/image1234' }
+    let(:droplet) { VCAP::CloudController::DropletModel.make(
+      docker_receipt_image: 'http://example.org/image1234',
+      droplet_hash: 'd_haash',
+      guid: 'some-droplet-guid',
+    )
+    }
 
     let(:cfg) { ::VCAP::CloudController::Config.new({ default_health_check_timeout: 99 }) }
     let(:lifecycle_type) { nil }
     let(:app_model) {
       ::VCAP::CloudController::AppModel.make(lifecycle_type,
                                              guid: 'app-guid',
-                                             droplet: ::VCAP::CloudController::DropletModel.make(state: 'STAGED'),
+                                             droplet: droplet,
                                              enable_ssh: false,
                                              environment_variables: { 'BISH': 'BASH', 'FOO': 'BAR' })
     }
@@ -45,7 +51,7 @@ RSpec.describe(OPI::Client) do
       let(:expected_body) {
         {
             process_guid: "process-guid-#{lrp.version}",
-            docker_image: nil,
+            docker_image: 'http://example.org/image1234',
             start_command: 'ls -la',
             environment: {
               'BISH': 'BASH',
@@ -76,6 +82,7 @@ RSpec.describe(OPI::Client) do
             },
             instances: 21,
             droplet_hash: lrp.droplet_hash,
+            droplet_guid: 'some-droplet-guid',
             health_check_type: 'port',
             health_check_http_endpoint: nil,
             health_check_timeout_ms: 12000,
@@ -83,7 +90,7 @@ RSpec.describe(OPI::Client) do
         }
       }
 
-      fit 'sends a PUT request' do
+      it 'sends a PUT request' do
         response = client.desire_app(lrp)
 
         expect(response.status_code).to equal(201)
