@@ -13,7 +13,7 @@ RSpec.describe(OPI::InstancesClient) do
       {
         process_guid: 'my-guid-0',
         instances: [
-          { index: 42, state: 'RUNNING' }
+          { index: 42, state: 'RUNNING', since: 999 }
         ]
       }.to_json
     end
@@ -55,7 +55,7 @@ RSpec.describe(OPI::InstancesClient) do
     it 'provides a since value' do
       actual_lrp = actual_lrps.first
       expect(actual_lrp).to respond_to(:since)
-      expect(actual_lrp.since).to eq(0)
+      expect(actual_lrp.since).to eq(999)
     end
 
     it 'provides a placement_error value' do
