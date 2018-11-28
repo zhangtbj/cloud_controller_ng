@@ -94,7 +94,7 @@ module OPI
       routing_info = VCAP::CloudController::Diego::Protocol::RoutingInfo.new(process).routing_info
       http_routes = (routing_info['http_routes'] || []).map do |i|
         {
-          hostnames:         [i['hostname']],
+          hostname:         i['hostname'],
           port:              i['port']
         }
       end
