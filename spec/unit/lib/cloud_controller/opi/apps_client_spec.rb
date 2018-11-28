@@ -173,12 +173,12 @@ RSpec.describe(OPI::Client) do
               routes: {
                 'cf-router' => [
                   {
-                    'hostnames'         => ['numero-uno.example.com'],
-                    'port'              => 8080
+                    'hostname' => 'numero-uno.example.com',
+                    'port' => 8080
                   },
                   {
-                    'hostnames'         => ['numero-dos.example.com'],
-                    'port'              => 8080
+                    'hostname' => 'numero-dos.example.com',
+                    'port' => 8080
                   }
                 ]
               },
