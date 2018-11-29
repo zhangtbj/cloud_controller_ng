@@ -73,7 +73,8 @@ module OPI
         health_check_http_endpoint: process.health_check_http_endpoint,
         health_check_timeout_ms: timeout_ms,
         last_updated: process.updated_at.to_f.to_s,
-        ports: ports(process)
+        ports: ports(process),
+        routes: routes(process)
       }
       MultiJson.dump(body)
     end
