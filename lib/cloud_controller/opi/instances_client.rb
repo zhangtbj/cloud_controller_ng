@@ -44,7 +44,7 @@ module OPI
       path = "/apps/#{process.guid}/instances"
       begin
         retries ||= 0
-        resp = @client.get(path)
+        resp = @client.get(path, version: process.version)
         resp_json = JSON.parse(resp.body)
         handle_error(resp_json)
       rescue CloudController::Errors::NoRunningInstances => e

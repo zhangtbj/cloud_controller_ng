@@ -40,7 +40,7 @@ module OPI
     def get_app(process)
       path = "/apps/#{process.guid}"
 
-      response = @client.get(path)
+      response = @client.get(path, version: process.version)
       if response.status_code == 404
         return nil
       end
@@ -50,6 +50,7 @@ module OPI
     end
 
     def stop_app(process_guid)
+      # TODO: investigate and potentially refactor guid
       path = "/apps/#{process_guid}/stop"
       @client.put(path)
     end
@@ -62,7 +63,8 @@ module OPI
       timeout_ms = (process.health_check_timeout || 0) * 1000
 
       body = {
-        process_guid: process_guid(process),
+        guid: process.guid,
+        version: process.version,
         docker_image: process.current_droplet.docker_receipt_image,
         start_command: process.command.nil? ? process.detected_start_command : process.command,
         environment: hash_values_to_s(environment_variables(process)),
@@ -81,7 +83,7 @@ module OPI
 
     def update_body(process)
       body = {
-        process_guid: process.guid,
+        process_guid: process_guid(process),
         update: {
           instances: process.desired_instances,
           routes: routes(process),
