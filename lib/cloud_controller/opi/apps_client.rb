@@ -71,6 +71,7 @@ module OPI
         start_command: process.command.nil? ? process.detected_start_command : process.command,
         environment: hash_values_to_s(environment_variables(process)),
         instances: process.desired_instances,
+        memory_mb: process.memory,
         droplet_hash: process.current_droplet.droplet_hash,
         droplet_guid: process.current_droplet.guid,
         health_check_type: process.health_check_type,
