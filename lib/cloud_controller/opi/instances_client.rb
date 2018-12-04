@@ -41,10 +41,10 @@ module OPI
     end
 
     def lrp_instances(process)
-      path = "/apps/#{process.guid}/instances"
+      path = "/apps/#{process.guid}/#{process.version}/instances"
       begin
         retries ||= 0
-        resp = @client.get(path, version: process.version)
+        resp = @client.get(path)
         resp_json = JSON.parse(resp.body)
         handle_error(resp_json)
       rescue CloudController::Errors::NoRunningInstances => e

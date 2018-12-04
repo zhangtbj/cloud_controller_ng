@@ -27,7 +27,7 @@ module OPI
     end
 
     def update_app(process, _)
-      path = "/apps/#{process.guid}"
+      path = "/apps/#{process.guid}-#{process.version}"
 
       response = @client.post(path, body: update_body(process))
       if response.status_code != 200
@@ -38,9 +38,9 @@ module OPI
     end
 
     def get_app(process)
-      path = "/apps/#{process.guid}"
+      path = "/apps/#{process.guid}/#{process.version}"
 
-      response = @client.get(path, version: process.version)
+      response = @client.get(path)
       if response.status_code == 404
         return nil
       end
@@ -49,9 +49,10 @@ module OPI
       desired_lrp_response.desired_lrp
     end
 
-    def stop_app(process_guid)
-      # TODO: investigate and potentially refactor guid
-      path = "/apps/#{process_guid}/stop"
+    def stop_app(versioned_guid)
+      guid = VCAP::CloudController::Diego::ProcessGuid.cc_process_guid(versioned_guid)
+      version = VCAP::CloudController::Diego::ProcessGuid.cc_process_version(versioned_guid)
+      path = "/apps/#{guid}/#{version}/stop"
       @client.put(path)
     end
 
@@ -65,6 +66,7 @@ module OPI
       body = {
         guid: process.guid,
         version: process.version,
+        process_guid: process_guid(process),
         docker_image: process.current_droplet.docker_receipt_image,
         start_command: process.command.nil? ? process.detected_start_command : process.command,
         environment: hash_values_to_s(environment_variables(process)),
@@ -83,7 +85,8 @@ module OPI
 
     def update_body(process)
       body = {
-        process_guid: process_guid(process),
+        guid: process.guid,
+        version: process.version,
         update: {
           instances: process.desired_instances,
           routes: routes(process),
