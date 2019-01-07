@@ -27,7 +27,7 @@ module OPI
     end
 
     def update_app(process, _)
-      path = "/apps/#{process.guid}"
+      path = "/apps/#{process.guid}-#{process.version}"
 
       response = @client.post(path, body: update_body(process))
       if response.status_code != 200
@@ -38,7 +38,7 @@ module OPI
     end
 
     def get_app(process)
-      path = "/apps/#{process.guid}"
+      path = "/apps/#{process.guid}/#{process.version}"
 
       response = @client.get(path)
       if response.status_code == 404
@@ -49,8 +49,10 @@ module OPI
       desired_lrp_response.desired_lrp
     end
 
-    def stop_app(process_guid)
-      path = "/apps/#{process_guid}/stop"
+    def stop_app(versioned_guid)
+      guid = VCAP::CloudController::Diego::ProcessGuid.cc_process_guid(versioned_guid)
+      version = VCAP::CloudController::Diego::ProcessGuid.cc_process_version(versioned_guid)
+      path = "/apps/#{guid}/#{version}/stop"
       @client.put(path)
     end
 
@@ -62,25 +64,31 @@ module OPI
       timeout_ms = (process.health_check_timeout || 0) * 1000
 
       body = {
+        guid: process.guid,
+        version: process.version,
         process_guid: process_guid(process),
         docker_image: process.current_droplet.docker_receipt_image,
         start_command: process.command.nil? ? process.detected_start_command : process.command,
         environment: hash_values_to_s(environment_variables(process)),
         instances: process.desired_instances,
+        memory_mb: process.memory,
         droplet_hash: process.current_droplet.droplet_hash,
         droplet_guid: process.current_droplet.guid,
         health_check_type: process.health_check_type,
         health_check_http_endpoint: process.health_check_http_endpoint,
         health_check_timeout_ms: timeout_ms,
         last_updated: process.updated_at.to_f.to_s,
-        volume_mounts: generate_volume_mounts(process)
+        volume_mounts: generate_volume_mounts(process),
+        ports: ports(process),
+        routes: routes(process)
       }
       MultiJson.dump(body)
     end
 
     def update_body(process)
       body = {
-        process_guid: process.guid,
+        guid: process.guid,
+        version: process.version,
         update: {
           instances: process.desired_instances,
           routes: routes(process),
@@ -94,7 +102,7 @@ module OPI
       routing_info = VCAP::CloudController::Diego::Protocol::RoutingInfo.new(process).routing_info
       http_routes = (routing_info['http_routes'] || []).map do |i|
         {
-          hostnames:         [i['hostname']],
+          hostname:         i['hostname'],
           port:              i['port']
         }
       end
@@ -109,13 +117,14 @@ module OPI
                 merge(SystemEnvPresenter.new(process.service_bindings).system_env)
 
       opi_env = opi_env.merge(DATABASE_URL: process.database_uri) if process.database_uri
-      opi_env.merge(port_environment_variables)
+      opi_env.merge(port_environment_variables(process))
     end
 
-    def port_environment_variables
+    def port_environment_variables(process)
+      port = ports(process).first
       {
-        PORT: '8080',
-        VCAP_APP_PORT: '8080',
+        PORT: port.to_s,
+        VCAP_APP_PORT: port.to_s,
         VCAP_APP_HOST: '0.0.0.0',
       }
     end
@@ -128,6 +137,10 @@ module OPI
 
     def process_guid(process)
       "#{process.guid}-#{process.version}"
+    end
+
+    def ports(process)
+      ::VCAP::CloudController::Diego::Protocol::OpenProcessPorts.new(process).to_a
     end
 
     def generate_volume_mounts(process)

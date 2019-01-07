@@ -12,6 +12,9 @@ RSpec.describe(OPI::Client) do
       guid: 'some-droplet-guid',
     )
     }
+    let(:routing_info) {
+      instance_double(VCAP::CloudController::Diego::Protocol::RoutingInfo)
+    }
 
     let(:cfg) { ::VCAP::CloudController::Config.new({ default_health_check_timeout: 99 }) }
     let(:lifecycle_type) { nil }
@@ -45,11 +48,29 @@ RSpec.describe(OPI::Client) do
 
     context 'when request executes successfully' do
       before do
+        routes = {
+              'http_routes' => [
+                {
+                  'hostname'          => 'numero-uno.example.com',
+                  'port'              => 8080
+                },
+                {
+                  'hostname'          => 'numero-dos.example.com',
+                  'port'              => 7777
+                }
+              ]
+        }
+
+        allow(routing_info).to receive(:routing_info).and_return(routes)
+        allow(VCAP::CloudController::Diego::Protocol::RoutingInfo).to receive(:new).with(lrp).and_return(routing_info)
+
         stub_request(:put, "#{opi_url}/apps/process-guid-#{lrp.version}").to_return(status: 201)
       end
 
       let(:expected_body) {
         {
+            guid: 'process-guid',
+            version: lrp.version.to_s,
             process_guid: "process-guid-#{lrp.version}",
             docker_image: 'http://example.org/image1234',
             start_command: 'ls -la',
@@ -81,14 +102,29 @@ RSpec.describe(OPI::Client) do
               'VCAP_APP_HOST': '0.0.0.0'
             },
             instances: 21,
+            memory_mb: 128,
             droplet_hash: lrp.droplet_hash,
             droplet_guid: 'some-droplet-guid',
             health_check_type: 'port',
             health_check_http_endpoint: nil,
             health_check_timeout_ms: 12000,
             last_updated: '2.0',
-            volume_mounts: []
-      }}
+            volume_mounts: [],
+            ports: [8080],
+            routes: {
+              'cf-router' => [
+                {
+                  'hostname' => 'numero-uno.example.com',
+                  'port' => 8080
+                },
+                {
+                  'hostname' => 'numero-dos.example.com',
+                  'port' => 7777
+                }
+              ]
+            },
+        }
+      }
 
       it 'sends a PUT request' do
         response = client.desire_app(lrp)
@@ -140,37 +176,37 @@ RSpec.describe(OPI::Client) do
 
         before do
           expected_body[:environment][:VCAP_SERVICES] = %{{"label-1":[{
-      "name": "#{service_instance.name}",
-      "instance_name": "name-23",
-      "binding_name": null,
-      "credentials": {
-        "creds-key-2": "creds-val-2"
-      },
-      "syslog_drain_url": null,
-      "volume_mounts": [
-        {
-          "container_dir": "/data/images",
-          "mode": "r",
-          "device_type": "shared"
-        },
-        {
-          "container_dir": "/data/pictures",
-          "mode": "r",
-          "device_type": "shared"
-        },
-        {
-          "container_dir": "/data/scratch",
-          "mode": "rw",
-          "device_type": "shared"
-        }
-      ],
-      "label": "label-1",
-      "provider": null,
-      "plan": "name-24",
-      "tags": [
+  "name": "#{service_instance.name}",
+  "instance_name": "name-23",
+  "binding_name": null,
+  "credentials": {
+    "creds-key-2": "creds-val-2"
+  },
+  "syslog_drain_url": null,
+  "volume_mounts": [
+    {
+      "container_dir": "/data/images",
+      "mode": "r",
+      "device_type": "shared"
+    },
+    {
+      "container_dir": "/data/pictures",
+      "mode": "r",
+      "device_type": "shared"
+    },
+    {
+      "container_dir": "/data/scratch",
+      "mode": "rw",
+      "device_type": "shared"
+    }
+  ],
+  "label": "label-1",
+  "provider": null,
+  "plan": "name-24",
+  "tags": [
 
-      ]
-    }]}}
+  ]
+}]}}
 
           expected_body[:volume_mounts] = [
             {
@@ -229,7 +265,7 @@ RSpec.describe(OPI::Client) do
 
     let(:existing_lrp) { double }
     let(:process) {
-      double(guid: 'guid-1234', desired_instances: 5, updated_at: Time.at(1529064800.9))
+      double(guid: 'guid-1234', version: 'version-1234', desired_instances: 5, updated_at: Time.at(1529064800.9))
     }
     let(:routing_info) {
       instance_double(VCAP::CloudController::Diego::Protocol::RoutingInfo)
@@ -252,25 +288,26 @@ RSpec.describe(OPI::Client) do
       allow(routing_info).to receive(:routing_info).and_return(routes)
       allow(VCAP::CloudController::Diego::Protocol::RoutingInfo).to receive(:new).with(process).and_return(routing_info)
 
-      stub_request(:post, "#{opi_url}/apps/guid-1234").
+      stub_request(:post, "#{opi_url}/apps/guid-1234-version-1234").
         to_return(status: 200)
     end
 
     context 'when request contains updated instances and routes' do
       let(:expected_body) {
         {
-            process_guid: 'guid-1234',
+            guid: 'guid-1234',
+            version: 'version-1234',
             update: {
               instances: 5,
               routes: {
                 'cf-router' => [
                   {
-                    'hostnames'         => ['numero-uno.example.com'],
-                    'port'              => 8080
+                    'hostname' => 'numero-uno.example.com',
+                    'port' => 8080
                   },
                   {
-                    'hostnames'         => ['numero-dos.example.com'],
-                    'port'              => 8080
+                    'hostname' => 'numero-dos.example.com',
+                    'port' => 8080
                   }
                 ]
               },
@@ -281,7 +318,7 @@ RSpec.describe(OPI::Client) do
 
       it 'executes an http request with correct instances and routes' do
         client.update_app(process, existing_lrp)
-        expect(WebMock).to have_requested(:post, "#{opi_url}/apps/guid-1234").
+        expect(WebMock).to have_requested(:post, "#{opi_url}/apps/guid-1234-version-1234").
           with(body: expected_body)
       end
 
@@ -296,7 +333,8 @@ RSpec.describe(OPI::Client) do
     context 'when request does not contain routes' do
       let(:expected_body) {
         {
-            process_guid: 'guid-1234',
+            guid: 'guid-1234',
+            version: 'version-1234',
             update: {
               instances: 5,
               routes: { 'cf-router' => [] },
@@ -311,7 +349,7 @@ RSpec.describe(OPI::Client) do
 
       it 'executes an http request with empty cf-router entry' do
         client.update_app(process, existing_lrp)
-        expect(WebMock).to have_requested(:post, "#{opi_url}/apps/guid-1234").
+        expect(WebMock).to have_requested(:post, "#{opi_url}/apps/guid-1234-version-1234").
           with(body: expected_body)
       end
 
@@ -324,12 +362,12 @@ RSpec.describe(OPI::Client) do
     end
 
     context 'when the response has an error' do
-      let(:expected_body) { {
-        error: { message: 'reasons for failure' }
-      }.to_json}
+      let(:expected_body) do
+        { error: { message: 'reasons for failure' } }.to_json
+      end
 
       before do
-        stub_request(:post, "#{opi_url}/apps/guid-1234").
+        stub_request(:post, "#{opi_url}/apps/guid-1234-version-1234").
           to_return(status: 400, body: expected_body)
       end
 
@@ -342,7 +380,7 @@ RSpec.describe(OPI::Client) do
   describe '#get_app' do
     let(:opi_url) { 'http://opi.service.cf.internal:8077' }
     subject(:client) { described_class.new(opi_url) }
-    let(:process) { double(guid: 'guid-1234') }
+    let(:process) { double(guid: 'guid-1234', version: 'version-1234') }
 
     context 'when the app exists' do
       let(:desired_lrp) {
@@ -353,13 +391,13 @@ RSpec.describe(OPI::Client) do
         { desired_lrp: desired_lrp }.to_json
       }
       before do
-        stub_request(:get, "#{opi_url}/apps/guid-1234").
+        stub_request(:get, "#{opi_url}/apps/guid-1234/version-1234").
           to_return(status: 200, body: expected_body)
       end
 
       it 'executes an HTTP request' do
         client.get_app(process)
-        expect(WebMock).to have_requested(:get, "#{opi_url}/apps/guid-1234")
+        expect(WebMock).to have_requested(:get, "#{opi_url}/apps/guid-1234/version-1234")
       end
 
       it 'returns the desired lrp' do
@@ -371,13 +409,13 @@ RSpec.describe(OPI::Client) do
 
     context 'when the app does not exist' do
       before do
-        stub_request(:get, "#{opi_url}/apps/guid-1234").
+        stub_request(:get, "#{opi_url}/apps/guid-1234/version-1234").
           to_return(status: 404)
       end
 
       it 'executed and HTTP request' do
         client.get_app(process)
-        expect(WebMock).to have_requested(:get, "#{opi_url}/apps/guid-1234")
+        expect(WebMock).to have_requested(:get, "#{opi_url}/apps/guid-1234/version-1234")
       end
 
       it 'returns nil' do
@@ -389,20 +427,22 @@ RSpec.describe(OPI::Client) do
 
   context 'stop an app' do
     let(:opi_url) { 'http://opi.service.cf.internal:8077' }
+    let(:guid) { 'd082417c-c5aa-488c-aaf8-845a580eb11f' }
+    let(:version) { 'e2fe80f5-fd0c-4699-a4d1-ae06bc48a923' }
     subject(:client) { described_class.new(opi_url) }
 
     before do
-      stub_request(:put, "#{opi_url}/apps/guid-1234/stop").
+      stub_request(:put, "#{opi_url}/apps/#{guid}/#{version}/stop").
         to_return(status: 200)
     end
 
     it 'executes an HTTP request' do
-      client.stop_app('guid-1234')
-      expect(WebMock).to have_requested(:put, "#{opi_url}/apps/guid-1234/stop")
+      client.stop_app("#{guid}-#{version}")
+      expect(WebMock).to have_requested(:put, "#{opi_url}/apps/#{guid}/#{version}/stop")
     end
 
     it 'returns status OK' do
-      response = client.stop_app('guid-1234')
+      response = client.stop_app("#{guid}-#{version}")
       expect(response.status).to equal(200)
     end
   end
