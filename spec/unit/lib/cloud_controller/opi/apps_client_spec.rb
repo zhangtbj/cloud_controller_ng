@@ -175,17 +175,18 @@ RSpec.describe(OPI::Client) do
         end
 
         before do
-          expected_body[:environment][:VCAP_SERVICES] = %{{"label-1":[{
-              "label": "label-1",
+          binding = ::VCAP::CloudController::ServiceBinding.make(app: app_model, service_instance: service_instance, volume_mounts: multiple_volume_mounts)
+          creds = SystemEnvPresenter.new([binding]).system_env[:VCAP_SERVICES][:"#{service_instance.service.label}"][0].to_hash[:credentials]
+          creds_json = MultiJson.dump(creds)
+          expected_body[:environment][:VCAP_SERVICES] = %{{"#{service_instance.service.label}":[{
+              "label": "#{service_instance.service.label}",
               "provider": null,
-              "plan": "name-24",
+              "plan": "#{service_instance.service_plan.name}",
               "name": "#{service_instance.name}",
               "tags": [],
-              "instance_name": "name-23",
+              "instance_name": "#{service_instance.name}",
               "binding_name": null,
-              "credentials": {
-                "creds-key-2": "creds-val-2"
-              },
+              "credentials": #{creds_json},
               "syslog_drain_url": null,
               "volume_mounts": [
                 {
@@ -212,8 +213,6 @@ RSpec.describe(OPI::Client) do
                   mount_dir: '/data/images'
             }
           ]
-
-          ::VCAP::CloudController::ServiceBinding.make(app: app_model, service_instance: service_instance, volume_mounts: multiple_volume_mounts)
         end
 
         it 'sends a PUT request' do
