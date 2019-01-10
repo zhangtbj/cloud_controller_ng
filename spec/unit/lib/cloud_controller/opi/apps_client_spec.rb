@@ -174,9 +174,15 @@ RSpec.describe(OPI::Client) do
           ]
         end
 
+        let(:binding) { ::VCAP::CloudController::ServiceBinding.make(app: app_model, service_instance: service_instance, volume_mounts: multiple_volume_mounts) }
+        let(:creds) {
+          system_env = SystemEnvPresenter.new([binding]).system_env
+          service_details = system_env[:VCAP_SERVICES][:"#{service_instance.service.label}"]
+          service_credentials = service_details[0].to_hash[:credentials]
+          service_credentials
+        }
+
         before do
-          binding = ::VCAP::CloudController::ServiceBinding.make(app: app_model, service_instance: service_instance, volume_mounts: multiple_volume_mounts)
-          creds = SystemEnvPresenter.new([binding]).system_env[:VCAP_SERVICES][:"#{service_instance.service.label}"][0].to_hash[:credentials]
           creds_json = MultiJson.dump(creds)
           expected_body[:environment][:VCAP_SERVICES] = %{{"#{service_instance.service.label}":[{
               "label": "#{service_instance.service.label}",
