@@ -29,7 +29,7 @@ module OPI
     private
 
     def to_request(staging_details)
-      VCAP::CloudController::Diego::Protocol.new.stage_package_request(@config, staging_details)
+      VCAP::CloudController::Diego::TaskRecipeBuilder.new.build_staging_task(@config, staging_details)
     end
   end
 end

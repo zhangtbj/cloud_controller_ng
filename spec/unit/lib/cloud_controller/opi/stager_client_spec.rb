@@ -6,18 +6,18 @@ RSpec.describe(OPI::StagerClient) do
   let(:staging_details) { stub_staging_details }
   let(:staging_request) { stub_staging_request_hash }
 
-  let(:protocol) { instance_double(VCAP::CloudController::Diego::Protocol) }
+  let(:task_builder) { instance_double(VCAP::CloudController::Diego::TaskRecipeBuilder) }
   let(:config) { instance_double(VCAP::CloudController::Config) }
 
   subject(:stager_client) { described_class.new(eirini_url, config) }
 
   context 'when staging an app' do
     before do
-      allow(VCAP::CloudController::Diego::Protocol).to receive(:new).and_return(protocol)
+      allow(VCAP::CloudController::Diego::TaskRecipeBuilder).to receive(:new).and_return(task_builder)
       allow(config).to receive(:get).
         with(:opi, :cc_uploader_url).
         and_return('https://cc-uploader.service.cf.internal:9091')
-      allow(protocol).to receive(:stage_package_request).
+      allow(task_builder).to receive(:build_staging_task).
         with(config, staging_details).
         and_return(staging_request)
 
