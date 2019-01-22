@@ -12,9 +12,6 @@ module OPI
 
     def stage(staging_guid, staging_details)
       staging_request = to_request(staging_details)
-      dropet_upload_url = staging_request[:lifecycle_data][:droplet_upload_uri]
-      cc_uploader_url = @config.get(:opi, :cc_uploader_url)
-      staging_request[:lifecycle_data][:droplet_upload_uri] = "#{cc_uploader_url}/v1/droplet/#{staging_guid}?cc-droplet-upload-uri=#{dropet_upload_url}"
 
       payload = MultiJson.dump(staging_request)
       response = @client.post("/stage/#{staging_guid}", body: payload)
@@ -29,7 +26,29 @@ module OPI
     private
 
     def to_request(staging_details)
-      VCAP::CloudController::Diego::Protocol.new.stage_package_request(@config, staging_details)
+      lifecycle_type = staging_details.lifecycle.type
+      action_builder = VCAP::CloudController::Diego::LifecycleProtocol.protocol_for_type(lifecycle_type).staging_action_builder(@config, staging_details)
+      lifecycle_data = action_builder.lifecycle_data
+      {
+          app_guid: staging_details.package.app_guid,
+          environment: action_builder.task_environment_variables,
+          completion_callback: staging_completion_callback(staging_details),
+          lifecycle_data: {
+              droplet_upload_uri: lifecycle_data.droplet_upload_uri,
+              app_bits_download_uri: lifecycle_data.app_bits_download_uri,
+              buildpacks: lifecycle_data.buildpacks
+          }
+      }
+    end
+
+    def staging_completion_callback(staging_details)
+      port   = @config.get(:tls_port)
+      scheme = 'https'
+
+      auth      = "#{@config.get(:internal_api, :auth_user)}:#{CGI.escape(@config.get(:internal_api, :auth_password))}"
+      host_port = "#{@config.get(:internal_service_hostname)}:#{port}"
+      path      = "/internal/v3/staging/#{staging_details.staging_guid}/build_completed?start=#{staging_details.start_after_staging}"
+      "#{scheme}://#{auth}@#{host_port}#{path}"
     end
   end
 end
