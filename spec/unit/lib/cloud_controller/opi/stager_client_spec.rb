@@ -6,7 +6,7 @@ RSpec.describe(OPI::StagerClient) do
   let(:eirini_url) { 'http://eirini.loves.heimdall:777' }
 
   let(:staging_details) { stub_staging_details }
-  let(:lifecycle_data) { stub_lifecycle_data  }
+  let(:lifecycle_data) { stub_lifecycle_data }
 
   let(:lifecycle_environment_variables) { [
     ::Diego::Bbs::Models::EnvironmentVariable.new(name: 'VCAP_APPLICATION', value: '{"wow":"pants"}'),
@@ -46,7 +46,8 @@ RSpec.describe(OPI::StagerClient) do
                       { name: 'MEMORY_LIMIT', value: '256m' },
                       { name: 'VCAP_SERVICES', value: '{}' }],
          completion_callback: 'https://internal_user:internal_password@api.internal.cf:8182/internal/v3/staging//build_completed?start=',
-        lifecycle_data: { droplet_upload_uri: 'http://upload.me', app_bits_download_uri: 'http://download.me',
+        lifecycle_data: { droplet_upload_uri: 'http://cc-uploader.service.cf.internal:9091/v1/droplet/guid?cc-droplet-upload-uri=http://upload.me',
+                          app_bits_download_uri: 'http://download.me',
                           buildpacks: [{ name: 'ruby', key: 'idk', url: 'www.com', skip_detect: false }]
       } }.to_json
       )
@@ -75,13 +76,13 @@ RSpec.describe(OPI::StagerClient) do
     data                                            = VCAP::CloudController::Diego::Buildpack::LifecycleData.new
     data.app_bits_download_uri                      = 'http://download.me'
     data.buildpacks                                 = [
-       {
-            name: 'ruby',
-            key: 'idk',
-            url: 'www.com',
-            skip_detect: false
-        }
-     ]
+      {
+           name: 'ruby',
+           key: 'idk',
+           url: 'www.com',
+           skip_detect: false
+       }
+    ]
     data.droplet_upload_uri                         = 'http://upload.me'
     data.build_artifacts_cache_download_uri         = 'dont care'
     data.stack                                      = 'dont care'
