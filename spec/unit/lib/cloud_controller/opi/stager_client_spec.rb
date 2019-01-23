@@ -2,28 +2,17 @@ require 'spec_helper'
 require 'cloud_controller/opi/stager_client'
 
 RSpec.describe(OPI::StagerClient) do
-  let(:eirini_url) { 'http://eirini.loves.heimdall:777' }
-  let(:staging_details) { stub_staging_details }
-
   let(:config) { TestConfig.config_instance }
+  let(:eirini_url) { 'http://eirini.loves.heimdall:777' }
+
+  let(:staging_details) { stub_staging_details }
+  let(:lifecycle_data) { stub_lifecycle_data  }
+
   let(:lifecycle_environment_variables) { [
     ::Diego::Bbs::Models::EnvironmentVariable.new(name: 'VCAP_APPLICATION', value: '{"wow":"pants"}'),
     ::Diego::Bbs::Models::EnvironmentVariable.new(name: 'MEMORY_LIMIT', value: '256m'),
     ::Diego::Bbs::Models::EnvironmentVariable.new(name: 'VCAP_SERVICES', value: '{}'),
   ]
-  }
-
-  let(:lifecycle_data) { instance_double(VCAP::CloudController::Diego::Buildpack::LifecycleData,
-                                         app_bits_download_uri: 'http://download.me',
-                                        buildpacks: [
-                                          {
-                                               name: 'ruby',
-                                               key: 'idk',
-                                               url: 'www.com',
-                                               skip_detect: false
-                                           }
-                                        ],
-                                         droplet_upload_uri: 'http://upload.me')
   }
 
   let(:staging_action_builder) do
@@ -80,5 +69,25 @@ RSpec.describe(OPI::StagerClient) do
     staging_details.package                         = double(app_guid: 'thor')
     staging_details.lifecycle                       = double(type: VCAP::CloudController::Lifecycles::BUILDPACK)
     staging_details
+  end
+
+  def stub_lifecycle_data
+    data                                            = VCAP::CloudController::Diego::Buildpack::LifecycleData.new
+    data.app_bits_download_uri                      = 'http://download.me'
+    data.buildpacks                                 = [
+       {
+            name: 'ruby',
+            key: 'idk',
+            url: 'www.com',
+            skip_detect: false
+        }
+     ]
+    data.droplet_upload_uri                         = 'http://upload.me'
+    data.build_artifacts_cache_download_uri         = 'dont care'
+    data.stack                                      = 'dont care'
+    data.build_artifacts_cache_upload_uri           = 'dont care'
+    data.buildpack_cache_checksum                   = 'dont care'
+    data.app_bits_checksum                          = { type: 'sha256', value: 'also dont care' }
+    data.message
   end
 end

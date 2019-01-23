@@ -29,14 +29,15 @@ module OPI
       lifecycle_type = staging_details.lifecycle.type
       action_builder = VCAP::CloudController::Diego::LifecycleProtocol.protocol_for_type(lifecycle_type).staging_action_builder(@config, staging_details)
       lifecycle_data = action_builder.lifecycle_data
+
       {
           app_guid: staging_details.package.app_guid,
           environment: action_builder.task_environment_variables,
           completion_callback: staging_completion_callback(staging_details),
           lifecycle_data: {
-              droplet_upload_uri: lifecycle_data.droplet_upload_uri,
-              app_bits_download_uri: lifecycle_data.app_bits_download_uri,
-              buildpacks: lifecycle_data.buildpacks
+              droplet_upload_uri: lifecycle_data[:droplet_upload_uri],
+              app_bits_download_uri: lifecycle_data[:app_bits_download_uri],
+              buildpacks: lifecycle_data[:buildpacks]
           }
       }
     end
